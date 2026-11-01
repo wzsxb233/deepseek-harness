@@ -383,7 +383,39 @@ export interface SessionEventMap {
      */
     error?: { name: string; code: string; reason?: string }
     meta?: JsonValue
+    /** Monotonic elapsed time in milliseconds when the tool body ran; absent when it did not execute. */
+    durationMs?: number
   }
+  /** Durable task admission record used by native, nested, and PTC calls. */
+  'task/start': {
+    taskId: string
+    kind: string
+    ownerTaskId?: string
+    replayPolicy?: 'safe' | 'unsafe'
+    input?: JsonValue
+  }
+  /** Durable task checkpoint; the newest checkpoint is the task's recoverable state. */
+  'task/checkpoint': { taskId: string; state: JsonValue }
+  /** Durable task terminal receipt. */
+  'task/end': {
+    taskId: string
+    status: 'completed' | 'error' | 'aborted' | 'interrupted'
+    durationMs?: number
+    error?: { name: string; code: string; reason?: string }
+  }
+  /** Durable document creation for task/session/conversation-owned state. */
+  'document/create': {
+    documentId: string
+    kind: string
+    version: number
+    scope: 'session' | 'task' | 'conversation'
+    ownerTaskId?: string
+    state: JsonValue
+  }
+  /** Durable document replacement checkpoint. */
+  'document/update': { documentId: string; version: number; state: JsonValue }
+  /** Durable document tombstone. */
+  'document/delete': { documentId: string }
   /**
    * Full header for the next request, appended inside its step before dispatch.
    * It is log-only; the latest snapshot reconstructs the request header.

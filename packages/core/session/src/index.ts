@@ -23,6 +23,8 @@ import { ToolHistoryProjection } from './tool-history.ts'
 import type { ToolHistory } from '@deepseek-ai/dsh-llm'
 
 import { buildForkSeed } from './fork.ts'
+import { foldDurableTaskGraph } from './task-graph.ts'
+import type { DurableTaskGraph } from './task-graph.ts'
 
 export { buildForkSeed } from './fork.ts'
 export * from './types.ts'
@@ -30,10 +32,23 @@ export { SessionPreparation } from './preparation.ts'
 export type { SessionPreparationOptions } from './preparation.ts'
 export type { AssistantMessage, DeveloperMessage, SystemMessage, ToolResultMessage, UserMessage } from '@deepseek-ai/dsh-llm'
 export { interruptedTurnClosers, ToolCallRecovery, TOOL_NOT_STARTED, TOOL_OUTCOME_UNKNOWN } from './repair.ts'
+export type { OpenTurnCloseOptions } from './repair.ts'
 export type { SessionSurface, SurfaceFoldReplacement, SurfaceFoldResult, SessionMessageProjection, SessionMessageProjectionContext } from './surface.ts'
 export { deriveEventMessage, foldSurface, isAppendSurfaceEvent, isReplacementSurfaceEvent, isSurfaceEvent, isSurfaceEligibleType } from './surface.ts'
 export { canonicalHeader, foldRequestHeader, headerEquals } from './request-header.ts'
 export { KNOWN_SESSION_EVENT_TYPES } from './known-event-types.ts'
+export { foldDurableTaskGraph, type DurableDocumentRecord, type DurableTaskGraph, type DurableTaskRecord } from './task-graph.ts'
+
+/** Why a Session or one of its event watches stopped. */
+export type SessionWatchEnd =
+  | { readonly reason: 'closed' }
+  | { readonly reason: 'session_failed'; readonly error: unknown }
+
+/** A pull-based event watch over one Session's append-only log. */
+export interface SessionEventWatch extends AsyncIterableIterator<SessionEvent> {
+  /** Resolves when the watch is closed or its Session fails. */
+  readonly end: Promise<SessionWatchEnd>
+}
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -428,6 +443,13 @@ interface SessionEntry {
   detach(): void
 }
 
+interface SessionWatchState {
+  queue: SessionEvent[]
+  pending: Array<(result: IteratorResult<SessionEvent>) => void>
+  ended: SessionWatchEnd | undefined
+  resolveEnd: ((end: SessionWatchEnd) => void) | undefined
+}
+
 /** Store attachment for the append path; module-private to keep Session store-agnostic publicly. */
 const attachments = new WeakMap<Session, SessionEntry>()
 
@@ -521,6 +543,10 @@ export function pluginRecordOf(event: SessionEvent): PluginRecord | undefined {
  */
 export class Session {
   private log: SessionEvent[] = []
+  private readonly closePromise: Promise<SessionWatchEnd>
+  private readonly resolveClosed: (end: SessionWatchEnd) => void
+  private closedEnd: SessionWatchEnd | undefined
+  private readonly watchers = new Set<SessionWatchState>()
   /** Single incremental owner of surface acceptance and projection state. */
   private readonly surfaceManager: SurfaceManager
 
@@ -631,6 +657,9 @@ export class Session {
     suppliedInheritedEventCount?: SessionLogOffset,
     projections: readonly SessionMessageProjection[] = [],
   ) {
+    const closed = Promise.withResolvers<SessionWatchEnd>()
+    this.closePromise = closed.promise
+    this.resolveClosed = closed.resolve
     this.surfaceManager = new SurfaceManager(this.log, SessionLogOffset(0), projections)
     const restoredHeader = mode === 'snapshot' ? undefined : validateRestoredSessionHeader(id, header)
     if (seed !== undefined) {
@@ -695,6 +724,75 @@ export class Session {
       this.append('session/end-seed', { inherited: true })
     } else if (seed !== undefined && !(mode === 'snapshot' && this.header.isSeeded) && this.log.at(-1)?.type !== 'session/end-seed') {
       this.append('session/end-seed', {})
+    }
+  }
+
+  /** Resolves once this Session leaves its store or is explicitly failed. */
+  get closed(): Promise<SessionWatchEnd> { return this.closePromise }
+
+  /**
+   * Fold the persisted task/document graph, including legacy tool/PTC records.
+   * @returns the reconstructed task/document graph and validation diagnostics.
+   */
+  taskGraph(): DurableTaskGraph {
+    // oxlint-disable-next-line typescript/no-deprecated -- graph fold is an explicit log snapshot API.
+    return foldDurableTaskGraph(this.snapshotEvents())
+  }
+
+  /**
+   * Watch events appended from `fromSeq` onward. A watch receives every event
+   * after it enters the log and ends with its Session's terminal reason.
+   * @param fromSeq - inclusive log position; defaults to the current tail.
+   * @returns an async iterator and terminal end promise.
+   */
+  watch(fromSeq: SessionLogOffset = this.seq): SessionEventWatch {
+    const state: SessionWatchState = {
+      queue: [...this.log.slice(fromSeq)], pending: [], ended: this.closedEnd, resolveEnd: undefined,
+    }
+    const end = Promise.withResolvers<SessionWatchEnd>()
+    state.resolveEnd = end.resolve
+    if (state.ended !== undefined) end.resolve(state.ended)
+    else this.watchers.add(state)
+    const finish = (reason: SessionWatchEnd = { reason: 'closed' }): void => {
+      if (state.ended !== undefined) return
+      state.ended = reason
+      this.watchers.delete(state)
+      for (const resolve of state.pending.splice(0)) resolve({ value: undefined, done: true })
+      state.resolveEnd?.(reason)
+    }
+    return {
+      end: end.promise,
+      next: async (): Promise<IteratorResult<SessionEvent>> => {
+        const event = state.queue.shift()
+        if (event !== undefined) return { value: event, done: false }
+        if (state.ended !== undefined) return { value: undefined, done: true }
+        return new Promise((resolve) => { state.pending.push(resolve) })
+      },
+      return: (): Promise<IteratorResult<SessionEvent>> => {
+        finish()
+        return Promise.resolve({ value: undefined, done: true })
+      },
+      throw: (error?: unknown): Promise<IteratorResult<SessionEvent>> => {
+        finish({ reason: 'session_failed', error })
+        return Promise.resolve({ value: undefined, done: true })
+      },
+      [Symbol.asyncIterator](): SessionEventWatch { return this },
+    }
+  }
+
+  /**
+   * Close this Session and all watches. Store lifecycles call this automatically.
+   * @param reason - terminal reason delivered to the Session and its watches.
+   */
+  close(reason: SessionWatchEnd = { reason: 'closed' }): void {
+    if (this.closedEnd !== undefined) return
+    this.closedEnd = reason
+    this.resolveClosed(reason)
+    for (const state of [...this.watchers]) {
+      state.ended = reason
+      this.watchers.delete(state)
+      for (const resolve of state.pending.splice(0)) resolve({ value: undefined, done: true })
+      state.resolveEnd?.(reason)
     }
   }
 
@@ -885,6 +983,7 @@ export class Session {
       }
       this.log.push(event)
       this.eventsSnapshot = undefined
+      this.publishWatchers(event)
       if (callbacks !== undefined && entry !== undefined) {
         invokeContainedSessionObservers(entry.emitCtx, 'session/event', entry.id, callbackArgs, callbacks)
       }
@@ -893,6 +992,16 @@ export class Session {
         entry.appending = false
         if (entry.detachRequested && !entry.announcing) entry.detach()
       }
+    }
+  }
+
+  /** Release one committed event to every active watcher after log insertion. */
+  private publishWatchers(event: SessionEvent): void {
+    for (const state of this.watchers) {
+      if (state.ended !== undefined) continue
+      const resolve = state.pending.shift()
+      if (resolve !== undefined) resolve({ value: event, done: false })
+      else state.queue.push(event)
     }
   }
 
@@ -1252,6 +1361,7 @@ export class SessionStore extends Service {
     if (this.store.get(entry.id) !== entry) return
     this.store.delete(entry.id)
     attachments.delete(entry.session)
+    entry.session.close()
     if (entry.announced) this.emitDisposed(entry)
   }
 

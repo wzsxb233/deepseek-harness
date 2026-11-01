@@ -1,0 +1,1289 @@
+{
+  "formatVersion": 2,
+  "roots": [
+    {
+      "key": "event:document/create",
+      "kind": "event",
+      "event": "document/create",
+      "surface": false,
+      "digest": "2279430ef63283dfe6effc74f7459e7a81819f0325a6ba91654dda79bf522e96",
+      "schema": {
+        "root": 0,
+        "nodes": [
+          {
+            "kind": "object",
+            "properties": [
+              {
+                "name": "data",
+                "type": 1,
+                "optional": false
+              },
+              {
+                "name": "ignorable",
+                "type": 13,
+                "optional": true
+              },
+              {
+                "name": "seq",
+                "type": 12,
+                "optional": false
+              },
+              {
+                "name": "time",
+                "type": 12,
+                "optional": false
+              },
+              {
+                "name": "type",
+                "type": 14,
+                "optional": false
+              }
+            ],
+            "indices": []
+          },
+          {
+            "kind": "object",
+            "properties": [
+              {
+                "name": "documentId",
+                "type": 2,
+                "optional": false
+              },
+              {
+                "name": "kind",
+                "type": 2,
+                "optional": false
+              },
+              {
+                "name": "ownerTaskId",
+                "type": 2,
+                "optional": true
+              },
+              {
+                "name": "scope",
+                "type": 3,
+                "optional": false
+              },
+              {
+                "name": "state",
+                "type": 7,
+                "optional": false
+              },
+              {
+                "name": "version",
+                "type": 12,
+                "optional": false
+              }
+            ],
+            "indices": []
+          },
+          {
+            "kind": "primitive",
+            "type": "string"
+          },
+          {
+            "kind": "union",
+            "types": [
+              4,
+              5,
+              6
+            ]
+          },
+          {
+            "kind": "literal",
+            "value": "conversation"
+          },
+          {
+            "kind": "literal",
+            "value": "session"
+          },
+          {
+            "kind": "literal",
+            "value": "task"
+          },
+          {
+            "kind": "union",
+            "types": [
+              2,
+              8,
+              9,
+              10,
+              11,
+              12
+            ]
+          },
+          {
+            "kind": "array",
+            "element": 7
+          },
+          {
+            "kind": "object",
+            "properties": [],
+            "indices": [
+              {
+                "key": 2,
+                "value": 7
+              }
+            ]
+          },
+          {
+            "kind": "primitive",
+            "type": "boolean"
+          },
+          {
+            "kind": "primitive",
+            "type": "null"
+          },
+          {
+            "kind": "primitive",
+            "type": "number"
+          },
+          {
+            "kind": "literal",
+            "value": true
+          },
+          {
+            "kind": "literal",
+            "value": "document/create"
+          }
+        ]
+      }
+    },
+    {
+      "key": "event:document/delete",
+      "kind": "event",
+      "event": "document/delete",
+      "surface": false,
+      "digest": "cfb56fc34f0f0f4471572b3f5e714fb350cca7fdcad7a9cfe7457d677c7b3c47",
+      "schema": {
+        "root": 0,
+        "nodes": [
+          {
+            "kind": "object",
+            "properties": [
+              {
+                "name": "data",
+                "type": 1,
+                "optional": false
+              },
+              {
+                "name": "ignorable",
+                "type": 3,
+                "optional": true
+              },
+              {
+                "name": "seq",
+                "type": 4,
+                "optional": false
+              },
+              {
+                "name": "time",
+                "type": 4,
+                "optional": false
+              },
+              {
+                "name": "type",
+                "type": 5,
+                "optional": false
+              }
+            ],
+            "indices": []
+          },
+          {
+            "kind": "object",
+            "properties": [
+              {
+                "name": "documentId",
+                "type": 2,
+                "optional": false
+              }
+            ],
+            "indices": []
+          },
+          {
+            "kind": "primitive",
+            "type": "string"
+          },
+          {
+            "kind": "literal",
+            "value": true
+          },
+          {
+            "kind": "primitive",
+            "type": "number"
+          },
+          {
+            "kind": "literal",
+            "value": "document/delete"
+          }
+        ]
+      }
+    },
+    {
+      "key": "event:document/update",
+      "kind": "event",
+      "event": "document/update",
+      "surface": false,
+      "digest": "91c39ee3a1b4b61efc59e45e19f4bdd136b0915f07aaefbb0562213d80692dc4",
+      "schema": {
+        "root": 0,
+        "nodes": [
+          {
+            "kind": "object",
+            "properties": [
+              {
+                "name": "data",
+                "type": 1,
+                "optional": false
+              },
+              {
+                "name": "ignorable",
+                "type": 9,
+                "optional": true
+              },
+              {
+                "name": "seq",
+                "type": 8,
+                "optional": false
+              },
+              {
+                "name": "time",
+                "type": 8,
+                "optional": false
+              },
+              {
+                "name": "type",
+                "type": 10,
+                "optional": false
+              }
+            ],
+            "indices": []
+          },
+          {
+            "kind": "object",
+            "properties": [
+              {
+                "name": "documentId",
+                "type": 2,
+                "optional": false
+              },
+              {
+                "name": "state",
+                "type": 3,
+                "optional": false
+              },
+              {
+                "name": "version",
+                "type": 8,
+                "optional": false
+              }
+            ],
+            "indices": []
+          },
+          {
+            "kind": "primitive",
+            "type": "string"
+          },
+          {
+            "kind": "union",
+            "types": [
+              2,
+              4,
+              5,
+              6,
+              7,
+              8
+            ]
+          },
+          {
+            "kind": "array",
+            "element": 3
+          },
+          {
+            "kind": "object",
+            "properties": [],
+            "indices": [
+              {
+                "key": 2,
+                "value": 3
+              }
+            ]
+          },
+          {
+            "kind": "primitive",
+            "type": "boolean"
+          },
+          {
+            "kind": "primitive",
+            "type": "null"
+          },
+          {
+            "kind": "primitive",
+            "type": "number"
+          },
+          {
+            "kind": "literal",
+            "value": true
+          },
+          {
+            "kind": "literal",
+            "value": "document/update"
+          }
+        ]
+      }
+    },
+    {
+      "key": "event:task/checkpoint",
+      "kind": "event",
+      "event": "task/checkpoint",
+      "surface": false,
+      "digest": "013d9bb26f3f9c39d5cfc021ef19b63cc9ae63131ee8130ce4381127a8b40c0b",
+      "schema": {
+        "root": 0,
+        "nodes": [
+          {
+            "kind": "object",
+            "properties": [
+              {
+                "name": "data",
+                "type": 1,
+                "optional": false
+              },
+              {
+                "name": "ignorable",
+                "type": 9,
+                "optional": true
+              },
+              {
+                "name": "seq",
+                "type": 8,
+                "optional": false
+              },
+              {
+                "name": "time",
+                "type": 8,
+                "optional": false
+              },
+              {
+                "name": "type",
+                "type": 10,
+                "optional": false
+              }
+            ],
+            "indices": []
+          },
+          {
+            "kind": "object",
+            "properties": [
+              {
+                "name": "state",
+                "type": 2,
+                "optional": false
+              },
+              {
+                "name": "taskId",
+                "type": 5,
+                "optional": false
+              }
+            ],
+            "indices": []
+          },
+          {
+            "kind": "union",
+            "types": [
+              3,
+              4,
+              5,
+              6,
+              7,
+              8
+            ]
+          },
+          {
+            "kind": "array",
+            "element": 2
+          },
+          {
+            "kind": "object",
+            "properties": [],
+            "indices": [
+              {
+                "key": 5,
+                "value": 2
+              }
+            ]
+          },
+          {
+            "kind": "primitive",
+            "type": "string"
+          },
+          {
+            "kind": "primitive",
+            "type": "boolean"
+          },
+          {
+            "kind": "primitive",
+            "type": "null"
+          },
+          {
+            "kind": "primitive",
+            "type": "number"
+          },
+          {
+            "kind": "literal",
+            "value": true
+          },
+          {
+            "kind": "literal",
+            "value": "task/checkpoint"
+          }
+        ]
+      }
+    },
+    {
+      "key": "event:task/end",
+      "kind": "event",
+      "event": "task/end",
+      "surface": false,
+      "digest": "4a908639ef777e07942cbda22b872f20baf4ada84dd5dcfc50ae565558df8668",
+      "schema": {
+        "root": 0,
+        "nodes": [
+          {
+            "kind": "object",
+            "properties": [
+              {
+                "name": "data",
+                "type": 1,
+                "optional": false
+              },
+              {
+                "name": "ignorable",
+                "type": 10,
+                "optional": true
+              },
+              {
+                "name": "seq",
+                "type": 2,
+                "optional": false
+              },
+              {
+                "name": "time",
+                "type": 2,
+                "optional": false
+              },
+              {
+                "name": "type",
+                "type": 11,
+                "optional": false
+              }
+            ],
+            "indices": []
+          },
+          {
+            "kind": "object",
+            "properties": [
+              {
+                "name": "durationMs",
+                "type": 2,
+                "optional": true
+              },
+              {
+                "name": "error",
+                "type": 3,
+                "optional": true
+              },
+              {
+                "name": "status",
+                "type": 5,
+                "optional": false
+              },
+              {
+                "name": "taskId",
+                "type": 4,
+                "optional": false
+              }
+            ],
+            "indices": []
+          },
+          {
+            "kind": "primitive",
+            "type": "number"
+          },
+          {
+            "kind": "object",
+            "properties": [
+              {
+                "name": "code",
+                "type": 4,
+                "optional": false
+              },
+              {
+                "name": "name",
+                "type": 4,
+                "optional": false
+              },
+              {
+                "name": "reason",
+                "type": 4,
+                "optional": true
+              }
+            ],
+            "indices": []
+          },
+          {
+            "kind": "primitive",
+            "type": "string"
+          },
+          {
+            "kind": "union",
+            "types": [
+              6,
+              7,
+              8,
+              9
+            ]
+          },
+          {
+            "kind": "literal",
+            "value": "aborted"
+          },
+          {
+            "kind": "literal",
+            "value": "completed"
+          },
+          {
+            "kind": "literal",
+            "value": "error"
+          },
+          {
+            "kind": "literal",
+            "value": "interrupted"
+          },
+          {
+            "kind": "literal",
+            "value": true
+          },
+          {
+            "kind": "literal",
+            "value": "task/end"
+          }
+        ]
+      }
+    },
+    {
+      "key": "event:task/start",
+      "kind": "event",
+      "event": "task/start",
+      "surface": false,
+      "digest": "7c3e4c5dc29f392ce55aa69698ebd67c38f619398d8414019f0cd6dd9f097f75",
+      "schema": {
+        "root": 0,
+        "nodes": [
+          {
+            "kind": "object",
+            "properties": [
+              {
+                "name": "data",
+                "type": 1,
+                "optional": false
+              },
+              {
+                "name": "ignorable",
+                "type": 12,
+                "optional": true
+              },
+              {
+                "name": "seq",
+                "type": 6,
+                "optional": false
+              },
+              {
+                "name": "time",
+                "type": 6,
+                "optional": false
+              },
+              {
+                "name": "type",
+                "type": 13,
+                "optional": false
+              }
+            ],
+            "indices": []
+          },
+          {
+            "kind": "object",
+            "properties": [
+              {
+                "name": "input",
+                "type": 2,
+                "optional": true
+              },
+              {
+                "name": "kind",
+                "type": 7,
+                "optional": false
+              },
+              {
+                "name": "ownerTaskId",
+                "type": 7,
+                "optional": true
+              },
+              {
+                "name": "replayPolicy",
+                "type": 9,
+                "optional": true
+              },
+              {
+                "name": "taskId",
+                "type": 7,
+                "optional": false
+              }
+            ],
+            "indices": []
+          },
+          {
+            "kind": "union",
+            "types": [
+              3,
+              4,
+              5,
+              6,
+              7,
+              8
+            ]
+          },
+          {
+            "kind": "array",
+            "element": 2
+          },
+          {
+            "kind": "primitive",
+            "type": "boolean"
+          },
+          {
+            "kind": "primitive",
+            "type": "null"
+          },
+          {
+            "kind": "primitive",
+            "type": "number"
+          },
+          {
+            "kind": "primitive",
+            "type": "string"
+          },
+          {
+            "kind": "object",
+            "properties": [],
+            "indices": [
+              {
+                "key": 7,
+                "value": 2
+              }
+            ]
+          },
+          {
+            "kind": "union",
+            "types": [
+              10,
+              11
+            ]
+          },
+          {
+            "kind": "literal",
+            "value": "safe"
+          },
+          {
+            "kind": "literal",
+            "value": "unsafe"
+          },
+          {
+            "kind": "literal",
+            "value": true
+          },
+          {
+            "kind": "literal",
+            "value": "task/start"
+          }
+        ]
+      }
+    },
+    {
+      "key": "event:tool/ptc-dispatch",
+      "kind": "event",
+      "event": "tool/ptc-dispatch",
+      "surface": false,
+      "digest": "828101ffa04e98004e181e19e92514844a8d69c07b55b37d5b11e633885d496a",
+      "schema": {
+        "root": 0,
+        "nodes": [
+          {
+            "kind": "object",
+            "properties": [
+              {
+                "name": "data",
+                "type": 1,
+                "optional": false
+              },
+              {
+                "name": "ignorable",
+                "type": 29,
+                "optional": true
+              },
+              {
+                "name": "seq",
+                "type": 17,
+                "optional": false
+              },
+              {
+                "name": "time",
+                "type": 17,
+                "optional": false
+              },
+              {
+                "name": "type",
+                "type": 37,
+                "optional": false
+              }
+            ],
+            "indices": []
+          },
+          {
+            "kind": "object",
+            "properties": [
+              {
+                "name": "arguments",
+                "type": 2,
+                "optional": false
+              },
+              {
+                "name": "content",
+                "type": 3,
+                "optional": false
+              },
+              {
+                "name": "durationMs",
+                "type": 17,
+                "optional": true
+              },
+              {
+                "name": "error",
+                "type": 31,
+                "optional": true
+              },
+              {
+                "name": "isError",
+                "type": 32,
+                "optional": false
+              },
+              {
+                "name": "journalVersion",
+                "type": 17,
+                "optional": true
+              },
+              {
+                "name": "meta",
+                "type": 33,
+                "optional": true
+              },
+              {
+                "name": "name",
+                "type": 6,
+                "optional": false
+              },
+              {
+                "name": "parentCallId",
+                "type": 6,
+                "optional": false
+              },
+              {
+                "name": "programFingerprint",
+                "type": 6,
+                "optional": true
+              },
+              {
+                "name": "rootCallId",
+                "type": 6,
+                "optional": false
+              },
+              {
+                "name": "subCallId",
+                "type": 6,
+                "optional": false
+              },
+              {
+                "name": "value",
+                "type": 33,
+                "optional": true
+              }
+            ],
+            "indices": []
+          },
+          {
+            "kind": "opaque",
+            "reason": "unknown"
+          },
+          {
+            "kind": "array",
+            "element": 4
+          },
+          {
+            "kind": "union",
+            "types": [
+              5,
+              8,
+              10,
+              13,
+              15,
+              19,
+              21
+            ]
+          },
+          {
+            "kind": "object",
+            "properties": [
+              {
+                "name": "text",
+                "type": 6,
+                "optional": false
+              },
+              {
+                "name": "type",
+                "type": 7,
+                "optional": false
+              }
+            ],
+            "indices": []
+          },
+          {
+            "kind": "primitive",
+            "type": "string"
+          },
+          {
+            "kind": "literal",
+            "value": "reasoning"
+          },
+          {
+            "kind": "object",
+            "properties": [
+              {
+                "name": "text",
+                "type": 6,
+                "optional": false
+              },
+              {
+                "name": "type",
+                "type": 9,
+                "optional": false
+              }
+            ],
+            "indices": []
+          },
+          {
+            "kind": "literal",
+            "value": "text"
+          },
+          {
+            "kind": "object",
+            "properties": [
+              {
+                "name": "tool",
+                "type": 11,
+                "optional": true
+              },
+              {
+                "name": "toolName",
+                "type": 6,
+                "optional": false
+              },
+              {
+                "name": "type",
+                "type": 12,
+                "optional": false
+              }
+            ],
+            "indices": []
+          },
+          {
+            "kind": "primitive",
+            "type": "never"
+          },
+          {
+            "kind": "literal",
+            "value": "tool-addition"
+          },
+          {
+            "kind": "object",
+            "properties": [
+              {
+                "name": "toolName",
+                "type": 6,
+                "optional": false
+              },
+              {
+                "name": "type",
+                "type": 14,
+                "optional": false
+              }
+            ],
+            "indices": []
+          },
+          {
+            "kind": "literal",
+            "value": "tool-removal"
+          },
+          {
+            "kind": "object",
+            "properties": [
+              {
+                "name": "attachment",
+                "type": 16,
+                "optional": false
+              },
+              {
+                "name": "type",
+                "type": 18,
+                "optional": false
+              }
+            ],
+            "indices": []
+          },
+          {
+            "kind": "object",
+            "properties": [
+              {
+                "name": "attachmentId",
+                "type": 6,
+                "optional": false
+              },
+              {
+                "name": "bytes",
+                "type": 17,
+                "optional": false
+              },
+              {
+                "name": "name",
+                "type": 6,
+                "optional": false
+              }
+            ],
+            "indices": []
+          },
+          {
+            "kind": "primitive",
+            "type": "number"
+          },
+          {
+            "kind": "literal",
+            "value": "file"
+          },
+          {
+            "kind": "object",
+            "properties": [
+              {
+                "name": "arguments",
+                "type": 6,
+                "optional": false
+              },
+              {
+                "name": "id",
+                "type": 6,
+                "optional": false
+              },
+              {
+                "name": "name",
+                "type": 6,
+                "optional": false
+              },
+              {
+                "name": "type",
+                "type": 20,
+                "optional": false
+              }
+            ],
+            "indices": []
+          },
+          {
+            "kind": "literal",
+            "value": "tool-call"
+          },
+          {
+            "kind": "object",
+            "properties": [
+              {
+                "name": "attachment",
+                "type": 22,
+                "optional": false
+              },
+              {
+                "name": "offloaded",
+                "type": 29,
+                "optional": true
+              },
+              {
+                "name": "type",
+                "type": 30,
+                "optional": false
+              }
+            ],
+            "indices": []
+          },
+          {
+            "kind": "object",
+            "properties": [
+              {
+                "name": "attachmentId",
+                "type": 6,
+                "optional": false
+              },
+              {
+                "name": "bytes",
+                "type": 17,
+                "optional": false
+              },
+              {
+                "name": "height",
+                "type": 17,
+                "optional": false
+              },
+              {
+                "name": "mediaType",
+                "type": 23,
+                "optional": false
+              },
+              {
+                "name": "name",
+                "type": 6,
+                "optional": true
+              },
+              {
+                "name": "originalDimensions",
+                "type": 28,
+                "optional": true
+              },
+              {
+                "name": "width",
+                "type": 17,
+                "optional": false
+              }
+            ],
+            "indices": []
+          },
+          {
+            "kind": "union",
+            "types": [
+              24,
+              25,
+              26,
+              27
+            ]
+          },
+          {
+            "kind": "literal",
+            "value": "image/gif"
+          },
+          {
+            "kind": "literal",
+            "value": "image/jpeg"
+          },
+          {
+            "kind": "literal",
+            "value": "image/png"
+          },
+          {
+            "kind": "literal",
+            "value": "image/webp"
+          },
+          {
+            "kind": "object",
+            "properties": [
+              {
+                "name": "height",
+                "type": 17,
+                "optional": false
+              },
+              {
+                "name": "width",
+                "type": 17,
+                "optional": false
+              }
+            ],
+            "indices": []
+          },
+          {
+            "kind": "literal",
+            "value": true
+          },
+          {
+            "kind": "literal",
+            "value": "image"
+          },
+          {
+            "kind": "object",
+            "properties": [
+              {
+                "name": "code",
+                "type": 6,
+                "optional": false
+              },
+              {
+                "name": "name",
+                "type": 6,
+                "optional": false
+              },
+              {
+                "name": "reason",
+                "type": 6,
+                "optional": true
+              }
+            ],
+            "indices": []
+          },
+          {
+            "kind": "primitive",
+            "type": "boolean"
+          },
+          {
+            "kind": "union",
+            "types": [
+              6,
+              17,
+              32,
+              34,
+              35,
+              36
+            ]
+          },
+          {
+            "kind": "array",
+            "element": 33
+          },
+          {
+            "kind": "primitive",
+            "type": "null"
+          },
+          {
+            "kind": "object",
+            "properties": [],
+            "indices": [
+              {
+                "key": 6,
+                "value": 33
+              }
+            ]
+          },
+          {
+            "kind": "literal",
+            "value": "tool/ptc-dispatch"
+          }
+        ]
+      }
+    },
+    {
+      "key": "event:tool/ptc-dispatch-start",
+      "kind": "event",
+      "event": "tool/ptc-dispatch-start",
+      "surface": false,
+      "digest": "bdf2821b0b03f74187082295f815f2946074f574a6dcfaa2e941f90fcc261098",
+      "schema": {
+        "root": 0,
+        "nodes": [
+          {
+            "kind": "object",
+            "properties": [
+              {
+                "name": "data",
+                "type": 1,
+                "optional": false
+              },
+              {
+                "name": "ignorable",
+                "type": 5,
+                "optional": true
+              },
+              {
+                "name": "seq",
+                "type": 3,
+                "optional": false
+              },
+              {
+                "name": "time",
+                "type": 3,
+                "optional": false
+              },
+              {
+                "name": "type",
+                "type": 6,
+                "optional": false
+              }
+            ],
+            "indices": []
+          },
+          {
+            "kind": "object",
+            "properties": [
+              {
+                "name": "arguments",
+                "type": 2,
+                "optional": false
+              },
+              {
+                "name": "journalVersion",
+                "type": 3,
+                "optional": true
+              },
+              {
+                "name": "name",
+                "type": 4,
+                "optional": false
+              },
+              {
+                "name": "parentCallId",
+                "type": 4,
+                "optional": false
+              },
+              {
+                "name": "programFingerprint",
+                "type": 4,
+                "optional": true
+              },
+              {
+                "name": "rootCallId",
+                "type": 4,
+                "optional": false
+              },
+              {
+                "name": "subCallId",
+                "type": 4,
+                "optional": false
+              }
+            ],
+            "indices": []
+          },
+          {
+            "kind": "opaque",
+            "reason": "unknown"
+          },
+          {
+            "kind": "primitive",
+            "type": "number"
+          },
+          {
+            "kind": "primitive",
+            "type": "string"
+          },
+          {
+            "kind": "literal",
+            "value": true
+          },
+          {
+            "kind": "literal",
+            "value": "tool/ptc-dispatch-start"
+          }
+        ]
+      }
+    }
+  ],
+  "types": []
+}

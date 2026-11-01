@@ -128,7 +128,39 @@ interface SessionEventMap {
      */
     error?: { name: string; code: string; reason?: string }
     meta?: JsonValue
+    /** Monotonic elapsed time in milliseconds when the tool body ran; absent when it did not execute. */
+    durationMs?: number
   }
+  /** Durable task admission record used by native, nested, and PTC calls. */
+  'task/start': {
+    taskId: string
+    kind: string
+    ownerTaskId?: string
+    replayPolicy?: 'safe' | 'unsafe'
+    input?: JsonValue
+  }
+  /** Durable task checkpoint; the newest checkpoint is the task's recoverable state. */
+  'task/checkpoint': { taskId: string; state: JsonValue }
+  /** Durable task terminal receipt. */
+  'task/end': {
+    taskId: string
+    status: 'completed' | 'error' | 'aborted' | 'interrupted'
+    durationMs?: number
+    error?: { name: string; code: string; reason?: string }
+  }
+  /** Durable document creation for task/session/conversation-owned state. */
+  'document/create': {
+    documentId: string
+    kind: string
+    version: number
+    scope: 'session' | 'task' | 'conversation'
+    ownerTaskId?: string
+    state: JsonValue
+  }
+  /** Durable document replacement checkpoint. */
+  'document/update': { documentId: string; version: number; state: JsonValue }
+  /** Durable document tombstone. */
+  'document/delete': { documentId: string }
   /**
    * Full header for the next request, appended inside its step before dispatch.
    * It is log-only; the latest snapshot reconstructs the request header.
@@ -534,6 +566,25 @@ declare class Session {
     eventState: SessionSeedEventState,
     projections?: readonly SessionMessageProjection[],
     ): Session;
+  /** Resolves once this Session leaves its store or is explicitly failed. */
+  get closed(): Promise<SessionWatchEnd>;
+  /**
+   * Fold the persisted task/document graph, including legacy tool/PTC records.
+   * @returns the reconstructed task/document graph and validation diagnostics.
+   */
+  taskGraph(): DurableTaskGraph;
+  /**
+   * Watch events appended from `fromSeq` onward. A watch receives every event
+   * after it enters the log and ends with its Session's terminal reason.
+   * @param fromSeq - inclusive log position; defaults to the current tail.
+   * @returns an async iterator and terminal end promise.
+   */
+  watch(fromSeq: SessionLogOffset = this.seq): SessionEventWatch;
+  /**
+   * Close this Session and all watches. Store lifecycles call this automatically.
+   * @param reason - terminal reason delivered to the Session and its watches.
+   */
+  close(reason: SessionWatchEnd = { reason: 'closed' }): void;
   /**
    * Return the immutable event stored at one exact sequence number.
    * @deprecated Existing logic may remain unmigrated for now, but new calls are prohibited.

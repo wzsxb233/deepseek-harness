@@ -3,6 +3,7 @@ import { jsonSchemaToTs, renderToolsSdk } from '@deepseek-ai/dsh-tools/src/ts-ty
 import type { ToolSdkSchema } from '@deepseek-ai/dsh-tools/src/ts-types.ts'
 import type { JsonSchemaNode } from '@deepseek-ai/dsh-tools/src/json-schema.ts'
 import { parameterSchemaSpecToJsonSchema } from '@deepseek-ai/dsh-tools'
+import ts from 'typescript'
 
 describe('jsonSchemaToTs', () => {
   it('maps every unified schema construct', () => {
@@ -108,6 +109,16 @@ describe('jsonSchemaToTs', () => {
 })
 
 describe('renderToolsSdk', () => {
+  it.each(['function-body', 'repl'] as const)('emits a valid mapped tools type with deferred search in %s mode', (programFormat) => {
+    const sdk = renderToolsSdk([], programFormat, true)
+    const source = sdk.split('```ts\n')[1]!.split('```')[0]!
+    const file = ts.createSourceFile('sdk.ts', source, ts.ScriptTarget.Latest, true)
+    const host = ts.createCompilerHost({ noEmit: true })
+    const original = host.getSourceFile.bind(host)
+    host.getSourceFile = (name, ...args) => name === 'sdk.ts' ? file : original(name, ...args)
+    const program = ts.createProgram(['sdk.ts'], { noEmit: true, skipLibCheck: true }, host)
+    expect(ts.getPreEmitDiagnostics(program).map(d => ts.flattenDiagnosticMessageText(d.messageText, '\n'))).toEqual([])
+  })
   const bash: ToolSdkSchema = {
     name: 'bash',
     description: 'Run a shell command.',

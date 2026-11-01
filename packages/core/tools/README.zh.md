@@ -84,6 +84,12 @@ ctx.tools.register(defineTool({
 
 `ctx.tools.restrict(filter)` 对单个 agent 继承的全局工具应用允许或拒绝掩码；掩码取交集，作用域注册保持可见，限制在 dispose（资源释放）时解除。`ctx.tools.get(name, scope)` 按一个作用域的视角解析工具。使用 Host 本地展示转换器的消费方如需匹配实际执行的定义，会传入发起调用的 agent。`ctx.tools.schemas(scope)` 返回可见 schema（不含 `execute` 函数）。
 
+可以将定义的 `callers` 设置为 `['model']`，把它作为模型入口；设置为 `['tools']`，把它限定为只能由 PTC 或其他组合工具调用的实现工具。省略时允许两类调用方。注册表会把仅供工具调用的定义从模型 schema 中移除，并把错误调用方的调用拒绝为 `UNKNOWN_TOOL`，从而明确模型能力集合与嵌套能力集合，同时复用同一条执行流水线。
+
+只有在调用中断后可以无需外部核验地重复执行时，才设置 `replay: 'safe'`；省略或设置为 `replay: 'unsafe'` 会保守地保留未知结果恢复。AgentLoop 会把该声明带入持久任务和恢复提示。
+
+工具主体可以使用 `exec.executeTool(name, arguments, options)`，通过同一条校验、调用方限制、策略、取消和输出流水线执行子工具。子调用继承父级 agent；父工具结算前会等待其子工作，未等待的子调用会先被中止。
+
 ### 对调用实施策略
 
 `ctx.tools.guard(guard)` 在可扩展的 `tools/pre-execute` waterfall（瀑布式事件）之后注册单调同步守卫：返回的理由会拒绝调用，后续监听器无法把该拒绝重新变为允许。流水线事件给插件更多控制——`tools/pre-execute` 决定允许／拒绝／询问，`tools/execute` 为超时或重试包装分发，`tools/post-execute` 检查或替换结果，`tools/result` 观测冻结的最终结果。
@@ -106,7 +112,7 @@ ctx.tools.register(defineTool({
 
 ### 设计理念
 
-注册表在作用域层中持有类型化 `ToolDefinition`，并在请求时把它们投影为面向模型的 `ToolSchema` 集合——`output`、`execute`、`finalizeContent`、`timeoutMs` 与呈现回调绝不会泄漏到协议上。每次调用都运行一条固定流水线：`tools/pre-execute`（可扩展的允许／拒绝／询问）→ 已注册单调守卫 → `tools/execute`（环绕分发包装层）→ `tools/post-execute`（检查／替换、附加上下文）→ 由定义持有的 `finalizeContent` → 仅观测的 `tools/result` 事件。只有 `tools/execute` 视图可以替换必填信号，注册表会在调用主体前重新融合调用方信号。
+注册表在作用域层中持有类型化 `ToolDefinition`，并在请求时把它们投影为面向模型的 `ToolSchema` 集合——`callers`、`replay`、`output`、`execute`、`finalizeContent`、`timeoutMs` 与呈现回调绝不会泄漏到协议上。每次调用都运行一条固定流水线：调用方类别解析 → `tools/pre-execute`（可扩展的允许／拒绝／询问）→ 已注册单调守卫 → `tools/execute`（环绕分发包装层）→ `tools/post-execute`（检查／替换、附加上下文）→ 由定义持有的 `finalizeContent` → 仅观测的 `tools/result` 事件。嵌套调用通过 parent token 复用这条流水线，注册表会在父调用结算前排空其拥有的工作。只有 `tools/execute` 视图可以替换必填信号，注册表会在调用主体前重新融合调用方信号。
 
 ### 源码地图
 
@@ -118,6 +124,8 @@ ctx.tools.register(defineTool({
 | [`src/json-schema.ts`](src/json-schema.ts) | 强制执行的原始 JSON Schema 子集与校验 |
 | [`src/presentation.ts`](src/presentation.ts) | 带 `card` 标签的 UI 呈现意图 |
 | [`src/ptc.ts`](src/ptc.ts) | PTC mode：SDK 生成、`run_code` 分发桥接层、结算 |
+| [`src/ptc-journal.ts`](src/ptc-journal.ts) | 纯函数折叠 PTC 启动/结算记录，并检测孤儿与分歧 |
+| [`src/search.ts`](src/search.ts) | 为延迟加载和 codemode 工具发现提供确定性 BM25 排序 |
 | [`src/ts-types.ts`](src/ts-types.ts) | TypeScript SDK 类型渲染 |
 | [`src/py-types.ts`](src/py-types.ts) | Python SDK 类型渲染 |
 
@@ -127,18 +135,20 @@ ctx.tools.register(defineTool({
 
 ### PTC mode
 
-在 `ptc` 下，注册表公开保留的 `run_code` 传输以及按所加载运行时语言生成的确定性 SDK。每个 SDK 绑定捕获冻结的 ToolSchema，经由调度器传入该次执行上下文。已开始的调用在策略之前只记录配对 id、名称和规范化参数；其结算事件保留渲染结果、可选展示元数据与结构化错误；元数据由该次调用的规范值投影并冻结，不改变程序读取的值或模型内容。描述与参数 schema 仅临时存活，不进入 Session 事件或 SDK 输出。调用通过复用原生并发约定的每次运行独有池调度。在纯 `ptc` 下，模型直呼其他任何可见工具都会在策略之前解析为 `UNKNOWN_TOOL`——通告面与可调用面保持一致。中间绑定值只存在于执行局部；只有外层 `run_code` 结果有硬大小上限。
+在 `ptc` 下，注册表公开保留的 `run_code` 传输以及按所加载运行时语言生成的确定性 SDK。每个 SDK 绑定捕获冻结的 ToolSchema，经由调度器传入该次执行上下文。已开始的调用在策略之前只记录配对 id、名称和规范化参数；其结算事件保留渲染结果、可选展示元数据、结构化错误，以及真正进入 body 的调用的单调时钟 `durationMs`；元数据由该次调用的规范值投影并冻结，不改变程序读取的值或模型内容。描述与参数 schema 仅临时存活，不进入 Session 事件或 SDK 输出。调用通过复用原生并发约定的每次运行独有池调度。恢复后，`foldPtcDispatchJournal()` 会配对这些记录，并在宿主尝试重放或重新挂接前拒绝孤儿、重复或分歧收据。在纯 `ptc` 下，模型直呼其他任何可见工具都会在策略之前解析为 `UNKNOWN_TOOL`——通告面与可调用面保持一致。规范绑定值会写入持久重放结果；只有外层 `run_code` 结果有硬大小上限。
 
 新子调用使用 `<parent>:ptc:<n>` 标识。消费方将这些标识视为不透明值，并通过精确相等关联事件；恢复的历史标识保留原始字节。[PTC mode 决策](../../../.agents/notes/implemented/feature/2026-06-15-ptc.zh.md) 负责持久化命名与恢复规则。
 
 成功且包含图片的子调用结果会成为延后的 user-message 上下文，其 `source.kind` 为 `ptc-mode`。其他 additional context 保留其生产工具的归属。
 
-当已挂载运行时支持覆盖时，`run_code` 接受 `timeoutMs`；其 schema 报告配置的默认值和上限以及运行时使用说明。Node 默认值为 120,000 ms，上限为 600,000 ms，包含嵌套工具和审批等待。更宽的 `sandbox_permissions` 模式要求非空 `justification`，并在程序启动前获得审批。schema 提示模型使用当前用户的语言撰写理由。授权仅用于该次完整执行；常驻 Session 策略与嵌套工具保留各自权限。程序不会自动重放：显式重试被拒程序前，应检查先前已发生的效果。 保留状态的 PTC 环境遵循会话文件策略。PTC 观察已提交的 Session 模式变化，并立即取消两种 Node 模式下受影响的调用。后续 PTC 调用等待这些调用的嵌套工具清理后，再解析最新策略。运行时负责进程失效和清理，权限设置保持同步。单次提权省略状态所有者，在临时环境中执行；普通调用仍可访问原环境的变量。
+当已挂载运行时支持覆盖时，`run_code` 接受 `timeoutMs`；其 schema 报告配置的默认值和上限以及运行时使用说明。Node 默认值为 120,000 ms，上限为 600,000 ms，包含嵌套工具和审批等待。更宽的 `sandbox_permissions` 模式要求非空 `justification`，并在程序启动前获得审批。schema 提示模型使用当前用户的语言撰写理由。授权仅用于该次完整执行；常驻 Session 策略与嵌套工具保留各自权限。日志完整的中断程序会依据源码 fingerprint、调用顺序、规范化参数和嵌套调用规范值确定性重挂载；被拒绝或日志不完整的程序不会自动重放，显式重试前应检查先前已发生的效果。保留状态的 PTC 环境遵循会话文件策略。PTC 观察已提交的 Session 模式变化，并立即取消两种 Node 模式下受影响的调用。后续 PTC 调用等待这些调用的嵌套工具清理后，再解析最新策略。运行时负责进程失效和清理，权限设置保持同步。单次提权省略状态所有者，在临时环境中执行；普通调用仍可访问原环境的变量。
 
 <a id="extension-points"></a>
 ### 扩展点
 
 工具插件调用 `ctx.tools.register()`，其 schema 会自动流入提示词组装。`tools/pre-execute` 是可重排的允许／拒绝／询问门禁；`ctx.tools.guard()` 在其后添加单调的拥有方策略；`tools/execute` 为超时、重试或指标包装规范化后的规范分发；`tools/post-execute` 可以替换内容或值、通过反馈阻止，或附加有序上下文；`tools/result` 观测不可变的最终结果。MCP 服务器发现工具后，用服务器的 schema 调用 `ctx.tools.register()`。
+
+提供 `tool_search` 的宿主可以调用 `ctx.tools.searchTools(query, scope, limit)`。它使用与 Pi Durable 相同的确定性 BM25 分词器（拆分驼峰、去停用词、轻量单数化以及稳定的并列顺序）对解析后的调用方过滤工具目录排序。该方法只返回脱离注册表的 schema；加载或添加声明仍由宿主显式通过 Session／agent 完成。
 
 </details>
 
@@ -234,7 +244,7 @@ Program-only SDK bindings:
 - **调用方定义的 subagent 与工作流结构化输出仍要求对象根**：这是消费方层面的守卫；共享 schema 词汇与工具输出支持任意 JSON 根。
 - **定义中的 `timeoutMs` 仅作声明之用**：注册表绝不会强制执行截止时间；要强制执行，必须使用 `@deepseek-ai/dsh-tool-call-timeout-policy` 包装层。
 - **PTC mode 的 SDK 语言由当前加载的运行时决定，且呈现方式按 agent 而非按工具**：`mode: ptc` 会拒绝组装提示词，除非 `ctx.ptcRuntime.language` 有已注册的 SDK 渲染器；同一个 agent 内不能让一个工具仅使用 Native，而另一个仅使用 PTC。
-- **PTC mode 中间值只存在于执行局部，且没有字节上限**：它们无法从会话回放重建，并可能耗尽进程或 worker 内存；只有外层 `run_code` 输出受 worker 可配置的硬上限约束。
+- **PTC mode 中间值没有字节上限**：规范结果记录支持确定性重放，但大值会增加日志体积，并可能耗尽进程或 worker 内存；只有外层 `run_code` 输出受 worker 可配置的硬上限约束。
 - **状态由运行时决定**：默认后端每次重新开始；REPL 后端按存活 Agent 保留内存。Agent 销毁时等待环境释放。重启与执行失败可能清除内存；模型说明会指导重新创建缺失变量。程序与结果仍写入 Session 日志，不序列化运行中的对象。
 
 `defineTool()`、注册表模式投影和系统提示组装会保留 `deferLoading: true`。该标记请求延迟加载工具定义，并不意味着存在 `tool-addition` 记录；提供方执行语义的限制见 [LLM 包](../../../packages/llm/llm/README.zh.md#known-limitations-and-deferred-work)。

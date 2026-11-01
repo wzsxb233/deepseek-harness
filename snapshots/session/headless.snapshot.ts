@@ -725,7 +725,10 @@ function verifyMcpResources(log: string, ptc: boolean): void {
       .flatMap(block => block.type === 'text' ? [block.text] : [])).join('\n')
     expect(output).toMatch(/"binaryAvailable"\s*:\s*true/)
   }
-  expect(log).not.toContain('bWNwLXJlc291cmNlLWJpbmFyeQ==')
+  // Canonical nested values now belong to the durable replay journal. The
+  // binary value stays out of rendered receipts and model-visible output.
+  expect(JSON.stringify(nativeResults)).not.toContain('bWNwLXJlc291cmNlLWJpbmFyeQ==')
+  expect(JSON.stringify(dispatches.map(dispatch => dispatch.content))).not.toContain('bWNwLXJlc291cmNlLWJpbmFyeQ==')
   expect(normalizedSystemPrompts(log, contextOf([log])).join('\n'))
     .toContain('MCP_RESOURCE_INSTRUCTION: keep {{braces}} literal.')
   expect(normalizedSystemPrompts(log, contextOf([log])).join('\n'))

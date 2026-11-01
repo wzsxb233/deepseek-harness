@@ -169,6 +169,7 @@ const processBoundTests = [
   'packages/llm/llm-pi-ai/tests/adapter.spec.ts',
   'packages/boot/app-boot/tests/app-boot.spec.ts',
   'packages/workflow/workflow-ptc/tests/workflow-ptc.spec.ts',
+  'apps/desktop/tests/login-shell-environment.spec.ts',
 ]
 
 // Claude Code's test-kit module names, served by the mods bridge's test support so the example mods' tests import them unchanged.

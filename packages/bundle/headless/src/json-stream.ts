@@ -35,10 +35,63 @@ export interface JsonProjectionOptions {
   maxStringBytes?: number
 }
 
+/**
+ * Durable state emitted by the headless bot when diagnostics are requested.
+ * Every field is derived from the live Session log or its registered inbox
+ * projection; no second state store is created for the bot surface.
+ */
+export interface JsonRunState {
+  /** Capabilities active in this composed dsh surface. */
+  capabilities: {
+    inbox: true
+    sessionWatch: true
+    sessionClosed: true
+    durableTaskGraph: true
+    deterministicCodemodeReplay: true
+    safeToolAutoRerun: true
+  }
+  /** Session interval observed by the bot's durable watch. */
+  session: {
+    fromSeq: number
+    toSeqExclusive: number
+    observedEvents: number
+    watch: 'drained'
+  }
+  /** Pending durable input at the end of this one-shot run. */
+  inbox: {
+    nextTurn: number
+    nextStep: number
+    nextTurnIds: readonly string[]
+    nextStepIds: readonly string[]
+  }
+  /** Compact task/document graph summary, safe for line-oriented consumers. */
+  graph: {
+    tasks: readonly {
+      taskId: string
+      kind: string
+      status: 'pending' | 'completed' | 'error' | 'aborted' | 'interrupted'
+      replayPolicy?: 'safe' | 'unsafe'
+      ownerTaskId?: string
+      checkpoints: number
+      durationMs?: number
+    }[]
+    documents: readonly {
+      documentId: string
+      kind: string
+      version: number
+      scope: 'session' | 'task' | 'conversation'
+      ownerTaskId?: string
+      deleted: boolean
+      seq: number
+    }[]
+    invalid: readonly string[]
+  }
+}
+
 /** The live handle of one `--json` projection. */
 export interface JsonProjection {
-  /** Write the terminal `final` event carrying the run's answer text. */
-  finish(text: string): void
+  /** Write an optional state record and the terminal `final` event. */
+  finish(text: string, state?: JsonRunState): void
   /** Stop observing the Session. */
   dispose(): void
 }
@@ -319,9 +372,10 @@ export function projectJsonRun(
   const stopSession = ctx.on('session/event', onSessionEvent)
 
   return {
-    finish(text: string): void {
+    finish(text: string, state?: JsonRunState): void {
       // The answer is the lossless terminal contract, so it is not truncated.
       if (disposed) return
+      if (state !== undefined) write({ type: 'state', ...state })
       sink.write(`${JSON.stringify({ type: 'final', text })}\n`)
     },
     dispose(): void {

@@ -24,8 +24,8 @@
   en: 4e27c45ae889369e
   zh: 7a0cd7a9dc7fe139
 /deepseek-ai-dsh-tools/use-this-package/restrict-tools-per-agent:
-  en: c6f98b2283cc2e47
-  zh: c2cdce5d13473f15
+  en: 3a81c897db705421
+  zh: b70ff247415a4cfc
 /deepseek-ai-dsh-tools/use-this-package/enforce-policy-on-calls:
   en: cbfe8317565ac62d
   zh: 1e71c66941e50881
@@ -36,20 +36,20 @@
   en: ce7e776e9d516bdb
   zh: 59d2751743db7795
 /deepseek-ai-dsh-tools/understand-the-implementation/design-concept:
-  en: 92e8af53e6067bad
-  zh: 33c7b99b42c5acac
+  en: 7f8000e2607f13e3
+  zh: 9f5e4dd04e235af8
 /deepseek-ai-dsh-tools/understand-the-implementation/source-map:
-  en: c14e20d6a5c4c408
-  zh: ab9dc0fd38006749
+  en: 38e1b16e2fe5d04e
+  zh: 2ba7c24ee90919dc
 /deepseek-ai-dsh-tools/understand-the-implementation/execution-and-cancellation:
   en: dc44a88997777988
   zh: 56454aeace1c8b77
 /deepseek-ai-dsh-tools/understand-the-implementation/ptc-mode:
-  en: 387700aa396f7ca2
-  zh: d440b283027e4fbd
+  en: 0506c4405bff365e
+  zh: e0c505f12f2cdb9a
 /deepseek-ai-dsh-tools/understand-the-implementation/extension-points:
-  en: c2a14d6f22bc9428
-  zh: 89c1414fca465931
+  en: 69bda292925ba8d1
+  zh: fd3f7d9a470ba366
 /deepseek-ai-dsh-tools/further-exploration:
   en: d8e2dfcfef2a2284
   zh: b33111cbc20dc498
@@ -96,8 +96,8 @@
   en: 2fbf2175168e8244
   zh: ad59a120b54a0996
 /deepseek-ai-dsh-tools/known-limitations-and-deferred-work:
-  en: 4a412f89b8a71b5a
-  zh: 803d995b036d5dbf
+  en: 018374eab2386671
+  zh: 433787b59f7b3737
 /deepseek-ai-dsh-tools/known-limitations-and-deferred-work/dev-note:
   en: e67f633dc6fe7773
   zh: 3bb0c20c93f16f98

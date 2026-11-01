@@ -8,7 +8,7 @@ Source: [`packages/core/tools/src/index.ts`](../../packages/core/tools/src/index
 
 ## `ToolDefinition` — a registered tool
 
-A `ToolSchema` (the model-facing fields) plus a mandatory canonical output declaration, the `execute` function, host-only scheduler metadata, an optional final-content callback, and optional UI presenters. The registry holds these; the loop dispatches calls through them. The registry's `schemas()` builds the model-facing `ToolSchema[]` by an explicit allowlist — `output`/`execute`/`projectContent`/`finalizeContent`/`timeoutMs`/`isConcurrencySafe`/`presentCall`/`presentResult` must never leak into a model request.
+A `ToolSchema` (the model-facing fields) plus caller restrictions, replay policy, a mandatory canonical output declaration, the `execute` function, host-only scheduler metadata, an optional final-content callback, and optional UI presenters. The registry holds these; the loop dispatches calls through them. The registry's `schemas()` builds the model-facing `ToolSchema[]` by an explicit allowlist — `callers`/`replay`/`output`/`execute`/`projectContent`/`finalizeContent`/`timeoutMs`/`isConcurrencySafe`/`presentCall`/`presentResult` must never leak into a model request.
 
 ```ts type-equiv
 /** Tool-owned canonical output contract used after the body returns a JSON value. */
@@ -25,6 +25,13 @@ interface ToolOutputDefinition {
 ```ts type-equiv
 /** A registered tool: its schema plus the execution function. */
 interface ToolDefinition extends ToolSchema {
+  /**
+   * Caller classes allowed to execute this tool. Omission allows both; this
+   * control is runtime-only and never reaches a provider schema.
+   */
+  readonly callers?: readonly ToolCaller[]
+  /** Whether recovery may retry an interrupted call without external verification. */
+  readonly replay?: ToolReplayPolicy
   /** Mandatory canonical output declaration. */
   readonly output: ToolOutputDefinition
   /**
@@ -249,6 +256,17 @@ interface ToolRunContext extends ToolExecution {
    * conclude the enclosing run.
    */
   concludeTurn(): void
+  /**
+   * Execute another registered tool as a child of this call. The child uses
+   * the same agent scope and is rejected when the selected definition does not
+   * allow `callers: ['tools']`. Unawaited children are aborted and drained
+   * before this call settles.
+   * @param name - registered child tool name.
+   * @param args - lossless JSON arguments for the child.
+   * @param options - optional child signal and stable key.
+   * @returns the child’s canonical execution result.
+   */
+  executeTool?(name: string, args: unknown, options?: NestedToolExecutionOptions): Promise<NestedToolExecutionResult>
 }
 ```
 
@@ -562,12 +580,44 @@ guard(guard: ToolGuard): () => void
 get(name: string, scope?: ScopeKey): ToolDefinition | undefined
 
 /**
+ * Resolve the recovery policy for a registered tool, defaulting conservatively.
+ * @param name - registered tool name.
+ * @param scope - optional agent scope selecting a scoped definition.
+ * @returns the tool's replay policy.
+ */
+replayPolicy(name: string, scope?: ScopeKey): ToolReplayPolicy
+
+/**
+ * Search the caller's currently visible tool catalog with deterministic BM25.
+ * Deferred tools are included alongside immediate tools so a host can expose
+ * one search surface for native, PTC, and codemode adapters; callers decide
+ * how to activate or render the returned schemas. Ties preserve registry
+ * order, making the result stable across restore and replay.
+ * @param query - natural-language search terms.
+ * @param scope - optional agent scope whose shadowing and restrictions apply.
+ * @param limit - maximum number of schemas, capped to a positive finite integer.
+ * @param caller - caller class whose definitions may be discovered.
+ * @returns detached schemas ranked best first.
+ */
+searchTools(query: string, scope?: ScopeKey, limit: number = 8, caller: ToolCaller = 'model'): ToolSchema[]
+
+/**
  * Project visible definitions onto the allowlisted model-facing schema fields,
  * excluding execution and presentation callbacks.
  * @param scope - the viewing scope (the agent); omitted = the global view.
  * @returns one deep-cloned schema per visible tool.
  */
 schemas(scope?: ScopeKey): ToolSchema[]
+
+/**
+ * Project visible definitions for one caller class without exposing runtime
+ * execution callbacks. PTC and nested tool adapters use this same projection
+ * so the generated SDK cannot announce a tool that caller restrictions deny.
+ * @param caller - `model` for direct schemas, `tools` for nested/codemode schemas.
+ * @param scope - optional agent scope.
+ * @returns detached schemas accepted by that caller class.
+ */
+schemasForCaller(caller: ToolCaller, scope?: ScopeKey): ToolSchema[]
 
 /**
  * Classify a pending call through the caller's visible tool definition. Only

@@ -52,6 +52,95 @@ const echoTool = defineTool({
 })
 
 describe('ToolRuntime', () => {
+  it('enforces caller classes for model and nested tool execution', async () => {
+    const ctx = await setup()
+    ctx.tools.register(defineContentToolFixture({
+      name: 'model-only', description: 'model entry point', parameters: {}, callers: ['model'],
+      async execute() { return [{ type: 'text' as const, text: 'model' }] },
+    }))
+    ctx.tools.register(defineContentToolFixture({
+      name: 'tools-only', description: 'nested implementation', parameters: {}, callers: ['tools'],
+      async execute() { return [{ type: 'text' as const, text: 'tools' }] },
+    }))
+    expect(ctx.tools.schemas().map(tool => tool.name)).toEqual(['model-only'])
+
+    const modelResult = await ctx.tools.execute({
+      signal: testToolSignal, callId: ToolCallId('model-only'), name: 'model-only', arguments: {},
+    })
+    expect(modelResult.isError).toBe(false)
+    const nestedToken = Symbol('nested') as ToolExecutionToken
+    const modelNestedResult = await ctx.tools.execute({
+      signal: testToolSignal, callId: ToolCallId('model-nested'), name: 'model-only', arguments: {}, parent: nestedToken,
+    })
+    expect(modelNestedResult.error?.info?.code).toBe('UNKNOWN_TOOL')
+    const toolsRootResult = await ctx.tools.execute({
+      signal: testToolSignal, callId: ToolCallId('tools-root'), name: 'tools-only', arguments: {},
+    })
+    expect(toolsRootResult.error?.info?.code).toBe('UNKNOWN_TOOL')
+    const toolsNestedResult = await ctx.tools.execute({
+      signal: testToolSignal, callId: ToolCallId('tools-nested'), name: 'tools-only', arguments: {}, parent: nestedToken,
+    })
+    expect(toolsNestedResult.isError).toBe(false)
+  })
+
+  it('rejects empty and duplicate caller declarations', async () => {
+    const ctx = await setup()
+    const make = (callers: readonly string[]) => defineContentToolFixture({
+      name: 'caller-validation', description: '', parameters: {}, callers: callers as never,
+      async execute() { return [] },
+    })
+    expect(() => ctx.tools.register(make([]))).toThrow('callers must not be empty')
+    expect(() => ctx.tools.register(make(['model', 'model']))).toThrow('lists "model" more than once')
+    expect(() => ctx.tools.register(make(['host']))).toThrow('unsupported caller "host"')
+  })
+
+  it('lets a tool execute a nested child and drains an unawaited child at settlement', async () => {
+    const ctx = await setup()
+    let childAborted = false
+    ctx.tools.register(defineTool({
+      name: 'nested-child', description: 'child implementation', parameters: { wait: { type: 'boolean' } }, callers: ['tools'],
+      output: { schema: { type: 'string' }, render: (_args, value) => [{ type: 'text', text: value }] },
+      async execute(args, exec) {
+        if (!args.wait) return 'child'
+        await new Promise<void>((resolve) => {
+          if (exec.signal.aborted) { childAborted = true; resolve(); return }
+          exec.signal.addEventListener('abort', () => { childAborted = true; resolve() }, { once: true })
+        })
+        return 'child'
+      },
+    }))
+    ctx.tools.register(defineTool({
+      name: 'nested-parent', description: 'parent implementation', parameters: {},
+      output: { schema: { type: 'string' }, render: (_args, value) => [{ type: 'text', text: value }] },
+      async execute(_args, exec) {
+        const result = await exec.executeTool!('nested-child', {}, { key: 'awaited' })
+        if (result.isError) throw new Error(result.error.message)
+        expect(result.taskId).toBe('nested-parent:nested:awaited:1')
+        expect(result.durationMs).toEqual(expect.any(Number))
+        void exec.executeTool!('nested-child', { wait: true }, { key: 'unawaited' })
+        return result.value as string
+      },
+    }))
+
+    const result = await ctx.tools.execute({
+      signal: testToolSignal, callId: ToolCallId('nested-parent'), name: 'nested-parent', arguments: {},
+    })
+    expect(result.isError).toBe(false)
+    expect(result.isError ? undefined : result.value).toBe('child')
+    expect(childAborted).toBe(true)
+  })
+
+  it('keeps replay policy runtime-only and defaults unknown tools to unsafe', async () => {
+    const ctx = await setup()
+    ctx.tools.register(defineContentToolFixture({
+      name: 'replay-safe', description: 'safe read', parameters: {}, replay: 'safe',
+      async execute() { return [] },
+    }))
+    expect(ctx.tools.replayPolicy('replay-safe')).toBe('safe')
+    expect(ctx.tools.replayPolicy('missing')).toBe('unsafe')
+    expect(ctx.tools.schemas()[0]).not.toHaveProperty('replay')
+  })
+
   it('preserves deferred loading through registry and prompt schema projection', async () => {
     const ctx = await setup()
     try {
@@ -61,6 +150,16 @@ describe('ToolRuntime', () => {
     } finally {
       await ctx.fiber.dispose()
     }
+  })
+
+  it('searches the resolved tool catalog with deterministic BM25 ranking', async () => {
+    const ctx = await setup()
+    ctx.tools.register(defineContentToolFixture({ name: 'read_file', description: 'Read source files from disk', parameters: {}, async execute() { return [] } }))
+    ctx.tools.register(defineContentToolFixture({ name: 'search_issues', description: 'Search tracked issues by query', parameters: {}, async execute() { return [] } }))
+    ctx.tools.register(defineContentToolFixture({ name: 'write_file', description: 'Write a file to disk', parameters: {}, async execute() { return [] } }))
+    expect(ctx.tools.searchTools('issue search').map(tool => tool.name)).toEqual(['search_issues'])
+    expect(ctx.tools.searchTools('file', undefined, 2).map(tool => tool.name)).toEqual(['write_file', 'read_file'])
+    expect(ctx.tools.searchTools('the and of')).toEqual([])
   })
 
   it('registers tools, exposes schemas, and feeds the system-prompt assembly', async () => {

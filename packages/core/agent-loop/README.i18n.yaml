@@ -36,8 +36,8 @@
   en: b3b3f0ad930961c3
   zh: f281e27136e686bc
 /deepseek-ai-dsh-agent-loop/understand-the-implementation/source-map:
-  en: 2a8b93869eb5a2f9
-  zh: ddab8e738d188a61
+  en: d6b9ad705c05f34a
+  zh: 317274a284a967a6
 /deepseek-ai-dsh-agent-loop/understand-the-implementation/creation-and-teardown:
   en: d079cf181ece9267
   zh: 047f76fecfc5497c
@@ -45,8 +45,8 @@
   en: 3c5721bc00a0bbf4
   zh: 711f832343ffbb75
 /deepseek-ai-dsh-agent-loop/understand-the-implementation/turn-and-step-flow:
-  en: 28939261ccc7defe
-  zh: 9d157a321307ebd4
+  en: 9d9edd5aae97e1b3
+  zh: 11b54484476fd8b5
 /deepseek-ai-dsh-agent-loop/understand-the-implementation/failure-and-cancellation:
   en: eea56903c4ff82f5
   zh: c0d5abb5767780ed

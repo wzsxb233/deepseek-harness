@@ -264,6 +264,7 @@ function renderSdkProgramInstructions(programFormat: 'function-body' | 'repl'): 
   return `Inside the program:
 
 - Call tools as \`await tools.name(args)\` — quoted access for exotic names: \`tools["my-tool"](args)\`. Every call resolves to the tool's typed canonical JSON value. Tool arguments must be lossless JSON.
+- Discover a deferred tool with \`await tools.searchTools({ query: "what you need", limit: 5 })\`; it returns detached schemas and never executes a tool.
 - A FAILED tool call rejects with \`ToolCallError\`, whose \`toolName\` identifies the failed tool and whose \`message\` is human-readable — \`try/catch\` it to handle and continue.
 - Independent read-only calls MAY overlap under \`Promise.all\` (safe calls run concurrently; mutating calls run alone, in submission order). Sequence dependent work with \`await\`.
 - ${outputInstruction} A successful tool result containing an image is attached after the run so you can inspect it on the next step; every other intermediate result stays out of the conversation, so extract just what you need.
@@ -307,9 +308,10 @@ function renderBashExample(schemas: ToolSdkSchema[], programFormat: 'function-bo
  * @param schemas - the tool schemas to declare (the caller excludes
  *   `run_code` itself).
  * @param programFormat - Runtime syntax; function bodies support returning a result, REPLs print it.
+ * @param includeSearchTools - include the runtime `tools.searchTools` helper.
  * @returns the complete section text.
  */
-export function renderToolsSdk(schemas: ToolSdkSchema[], programFormat: 'function-body' | 'repl' = 'function-body'): string {
+export function renderToolsSdk(schemas: ToolSdkSchema[], programFormat: 'function-body' | 'repl' = 'function-body', includeSearchTools = false): string {
   const sorted = [...schemas].sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0)
   const argsMembers: string[] = []
   const outputMembers: string[] = []
@@ -324,8 +326,17 @@ export function renderToolsSdk(schemas: ToolSdkSchema[], programFormat: 'functio
     argsMap,
     outputMap,
     'type ToolName = keyof ToolOutputMap',
+    ...includeSearchTools ? [
+      'type ToolSearchResult = { name: string; description: string; parameters: Record<string, JsonValue> }',
+      'type ToolSearchArgs = { query: string; limit?: number }',
+    ] : [],
     ['declare class ToolCallError extends Error {', '  readonly name: "ToolCallError";', '  readonly toolName: ToolName;', '}'].join('\n'),
-    ['declare const tools: {', '  [K in ToolName]: (args: ToolArgsMap[K]) => Promise<ToolOutputMap[K]>;', '}'].join('\n'),
+    [
+      'declare const tools: {',
+      '  [K in ToolName]: (args: ToolArgsMap[K]) => Promise<ToolOutputMap[K]>;',
+      ...includeSearchTools ? ['} & {', '  searchTools: (args: ToolSearchArgs) => Promise<ToolSearchResult[]>;'] : [],
+      '}',
+    ].join('\n'),
   ].join('\n\n')
   const jsonValue = 'type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue }'
   const instructions = renderSdkInstructions(programFormat)

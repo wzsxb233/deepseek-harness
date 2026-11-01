@@ -927,6 +927,10 @@ function preserveNormalizedVolatiles(
   normalizedExisting: unknown,
   stringMappings: ReadonlyMap<string, string>,
 ): unknown {
+  // Keep a fresh job identity and every textual reference together until the
+  // whole-log identity pass. Reusing an old text after tokenizing its job row
+  // leaves a dangling opaque id that later normalization cannot relate.
+  if (typeof fresh === 'string' && /\b[\w-]+-[0-9a-f]{16}\b/i.test(fresh)) return fresh
   if (
     Array.isArray(fresh)
     && Array.isArray(existing)

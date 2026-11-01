@@ -1142,6 +1142,19 @@ describe('refreshFixtureReplacements', () => {
 })
 
 describe('stabilizeRefreshLog', () => {
+  it('keeps refreshed job identities aligned with their textual references before redaction', () => {
+    const make = (id: string, text: string): string => [
+      JSON.stringify({ type: 'session', id: 'same', version: 4, createdAt: 1 }),
+      JSON.stringify({ type: 'job/registered', data: { jobId: id } }),
+      JSON.stringify({ type: 'tool/result', data: { message: { content: [{ type: 'text', text }] } } }),
+      '',
+    ].join('\n')
+    const fresh = make('bash-1111111111111111', 'started background job bash-1111111111111111')
+    const existing = make('{{id:1}}', 'started background job bash-2222222222222222')
+    const stable = stabilize(fresh, existing)
+    expect(stable).not.toContain('bash-2222222222222222')
+    expect(stable.match(/bash-1111111111111111/g)).toHaveLength(2)
+  })
   it('preserves unpacked member times when refresh first packs a chunk run', () => {
     const fresh = [
       '{"type":"session","id":"same","createdAt":200}',

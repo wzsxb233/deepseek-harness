@@ -40,6 +40,7 @@ Start independent delegations with `subagent` or `subagent_fork` together in one
 Inside the program:
 
 - Call tools as `await tools.name(args)` — quoted access for exotic names: `tools["my-tool"](args)`. Every call resolves to the tool's typed canonical JSON value. Tool arguments must be lossless JSON.
+- Discover a deferred tool with `await tools.searchTools({ query: "what you need", limit: 5 })`; it returns detached schemas and never executes a tool.
 - A FAILED tool call rejects with `ToolCallError`, whose `toolName` identifies the failed tool and whose `message` is human-readable — `try/catch` it to handle and continue.
 - Independent read-only calls MAY overlap under `Promise.all` (safe calls run concurrently; mutating calls run alone, in submission order). Sequence dependent work with `await`.
 - Only values emitted as program output enter the conversation. A successful tool result containing an image is attached after the run so you can inspect it on the next step; every other intermediate result stays out of the conversation, so extract just what you need.
@@ -539,6 +540,10 @@ interface ToolOutputMap {
 
 type ToolName = keyof ToolOutputMap
 
+type ToolSearchResult = { name: string; description: string; parameters: Record<string, JsonValue> }
+
+type ToolSearchArgs = { query: string; limit?: number }
+
 declare class ToolCallError extends Error {
   readonly name: "ToolCallError";
   readonly toolName: ToolName;
@@ -546,5 +551,7 @@ declare class ToolCallError extends Error {
 
 declare const tools: {
   [K in ToolName]: (args: ToolArgsMap[K]) => Promise<ToolOutputMap[K]>;
+} & {
+  searchTools: (args: ToolSearchArgs) => Promise<ToolSearchResult[]>;
 }
 ```

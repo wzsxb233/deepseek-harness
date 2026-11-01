@@ -113,6 +113,8 @@ The loop sends immutable requests with live cancellation and reuses freeze evide
 
 Failed steps [record missing tool results](../packages/core/agent-loop/README.md#understand-the-implementation).
 
+Resume durably replays safe calls during initialization.
+
 Details: the [sequence diagram](agent-lifecycle.md), the [tool pipeline](tool-execution-pipeline.md), and [cancellation and error recovery](subsystems/core.md#the-agent-handle).
 
 ## Session log

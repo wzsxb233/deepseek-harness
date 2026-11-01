@@ -3447,10 +3447,28 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the definition the scope resolves, or undefined when none is visible.',
       },
       {
+        signature: 'replayPolicy(name: string, scope?: ScopeKey): ToolReplayPolicy',
+        description: 'Resolve the recovery policy for a registered tool, defaulting conservatively.',
+        parameters: [{ name: 'name', description: 'registered tool name.' }, { name: 'scope', description: 'optional agent scope selecting a scoped definition.' }],
+        returns: 'the tool\'s replay policy.',
+      },
+      {
+        signature: 'searchTools(query: string, scope?: ScopeKey, limit: number = 8, caller: ToolCaller = \'model\'): ToolSchema[]',
+        description: 'Search the caller\'s currently visible tool catalog with deterministic BM25. Deferred tools are included alongside immediate tools so a host can expose one search surface for native, PTC, and codemode adapters; callers decide how to activate or render the returned schemas. Ties preserve registry order, making the result stable across restore and replay.',
+        parameters: [{ name: 'query', description: 'natural-language search terms.' }, { name: 'scope', description: 'optional agent scope whose shadowing and restrictions apply.' }, { name: 'limit', description: 'maximum number of schemas, capped to a positive finite integer.' }, { name: 'caller', description: 'caller class whose definitions may be discovered.' }],
+        returns: 'detached schemas ranked best first.',
+      },
+      {
         signature: 'schemas(scope?: ScopeKey): ToolSchema[]',
         description: 'Project visible definitions onto the allowlisted model-facing schema fields, excluding execution and presentation callbacks.',
         parameters: [{ name: 'scope', description: 'the viewing scope (the agent); omitted = the global view.' }],
         returns: 'one deep-cloned schema per visible tool.',
+      },
+      {
+        signature: 'schemasForCaller(caller: ToolCaller, scope?: ScopeKey): ToolSchema[]',
+        description: 'Project visible definitions for one caller class without exposing runtime execution callbacks. PTC and nested tool adapters use this same projection so the generated SDK cannot announce a tool that caller restrictions deny.',
+        parameters: [{ name: 'caller', description: '`model` for direct schemas, `tools` for nested/codemode schemas.' }, { name: 'scope', description: 'optional agent scope.' }],
+        returns: 'detached schemas accepted by that caller class.',
       },
       {
         signature: 'executionMode(exec: ToolExecutionInput): ToolExecutionMode',
@@ -5426,6 +5444,18 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type DshEnvironmentKey = `${typeof DSH_ENV_PREFIX}${string}`;',
   },
   {
+    name: 'DurableDocumentRecord',
+    declaration: 'export interface DurableDocumentRecord {\n    readonly documentId: string;\n    readonly kind: string;\n    readonly version: number;\n    readonly scope: \'session\' | \'task\' | \'conversation\';\n    readonly ownerTaskId?: string;\n    readonly state: unknown;\n    readonly deleted: boolean;\n    readonly seq: number;\n}',
+  },
+  {
+    name: 'DurableTaskGraph',
+    declaration: 'export interface DurableTaskGraph {\n    readonly tasks: ReadonlyMap<string, DurableTaskRecord>;\n    readonly documents: ReadonlyMap<string, DurableDocumentRecord>;\n    readonly invalid: readonly string[];\n}',
+  },
+  {
+    name: 'DurableTaskRecord',
+    declaration: 'export interface DurableTaskRecord {\n    readonly taskId: string;\n    readonly kind: string;\n    readonly ownerTaskId?: string;\n    readonly replayPolicy?: \'safe\' | \'unsafe\';\n    readonly input?: unknown;\n    readonly checkpoints: readonly {\n        readonly seq: number;\n        readonly state: unknown;\n    }[];\n    readonly end?: {\n        readonly seq: number;\n        readonly status: \'completed\' | \'error\' | \'aborted\' | \'interrupted\';\n        readonly durationMs?: number;\n        readonly error?: {\n            name: string;\n            code: string;\n            reason?: string;\n        };\n    };\n}',
+  },
+  {
     name: 'DynamicCordisPackage',
     declaration: 'export interface DynamicCordisPackage {\n    pluginId: CordisDynamicPluginId;\n    packageId: CordisDynamicPackageId;\n    pluginRunId: CordisDynamicPluginRunId;\n    name: string;\n}',
   },
@@ -6282,6 +6312,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface NativeFileApplication {\n    readonly id: string;\n    readonly name: string;\n    readonly default: boolean;\n    readonly icon: string | null;\n}',
   },
   {
+    name: 'NestedToolExecutionOptions',
+    declaration: 'export interface NestedToolExecutionOptions {\n    readonly signal?: AbortSignal;\n    readonly key?: string;\n    readonly progress?: boolean;\n}',
+  },
+  {
+    name: 'NestedToolExecutionResult',
+    declaration: 'export type NestedToolExecutionResult = ToolExecutionResult & {\n    readonly taskId: ToolCallId;\n    readonly durationMs?: number;\n};',
+  },
+  {
     name: 'NotFutureError',
     declaration: 'export interface NotFutureError {\n    readonly code: \'not_future\';\n    readonly message: string;\n}',
   },
@@ -6770,10 +6808,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type RequestErrorAction = {\n    kind: \'retry\';\n} | undefined;',
   },
   {
-    name: 'RequestHeaderReason',
-    declaration: 'export type RequestHeaderReason = \'initial\' | \'resume\' | \'change\' | \'series\';',
-  },
-  {
     name: 'RequestImageAttachment',
     declaration: 'export interface RequestImageAttachment {\n    variantId: ImageVariantId;\n    attachment: ImageAttachmentRef;\n    data: Uint8Array;\n    mediaType: ImageMediaType;\n    bytes: number;\n    width: number;\n    height: number;\n    depth: \'uchar\';\n    space: \'srgb\';\n    hasAlpha: boolean;\n}',
   },
@@ -6995,7 +7029,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'Session',
-    declaration: 'export class Session {\n    get surface(): SessionSurface;\n    readonly header: SessionHeader;\n    readonly inheritedEventCount: SessionLogOffset;\n    get id(): SessionId;\n    readonly firstLiveSeq: SessionLogOffset;\n    readonly firstLifecycleSeq: SessionLogOffset;\n    static create(id: SessionId, seed?: readonly SessionEvent[], header?: SessionHeader, inheritedEventCount?: SessionLogOffset, projections?: readonly SessionMessageProjection[]): Session;\n    static fromRestore(id: SessionId, seed: readonly SessionEvent[], header: SessionHeader, inheritedEventCount: SessionLogOffset, eventState: SessionSeedEventState, projections?: readonly SessionMessageProjection[]): Session;\n    eventAt(seq: SessionSeq): SessionEvent | undefined;\n    snapshotEvents(fromSeq: SessionLogOffset = SessionLogOffset(0), toSeqExclusive: SessionLogOffset = this.seq): readonly SessionEvent[];\n    ownEvents(): readonly SessionEvent[];\n    isOwnSeq(seq: SessionSeq): boolean;\n    get seq(): SessionLogOffset;\n    append<T extends SessionEventType>(type: T, data: SessionEventMap[T], ...opts: T extends SurfaceEventType ? [\n        opts: SurfaceIntent<T>\n    ] : [\n    ]): SessionEvent<T>;\n    requestHeader(): EpochHeader | undefined;\n    requestContext(): RequestContext | undefined;\n    toolHistory(): ToolHistory;\n    deriveMessages(): Message[];\n    deriveEventMessage(event: SessionEvent): Message | null;\n}',
+    declaration: 'export class Session {\n    get surface(): SessionSurface;\n    readonly header: SessionHeader;\n    readonly inheritedEventCount: SessionLogOffset;\n    get id(): SessionId;\n    readonly firstLiveSeq: SessionLogOffset;\n    readonly firstLifecycleSeq: SessionLogOffset;\n    static create(id: SessionId, seed?: readonly SessionEvent[], header?: SessionHeader, inheritedEventCount?: SessionLogOffset, projections?: readonly SessionMessageProjection[]): Session;\n    static fromRestore(id: SessionId, seed: readonly SessionEvent[], header: SessionHeader, inheritedEventCount: SessionLogOffset, eventState: SessionSeedEventState, projections?: readonly SessionMessageProjection[]): Session;\n    get closed(): Promise<SessionWatchEnd>;\n    taskGraph(): DurableTaskGraph;\n    watch(fromSeq: SessionLogOffset = this.seq): SessionEventWatch;\n    close(reason: SessionWatchEnd = { reason: \'closed\' }): void;\n    eventAt(seq: SessionSeq): SessionEvent | undefined;\n    snapshotEvents(fromSeq: SessionLogOffset = SessionLogOffset(0), toSeqExclusive: SessionLogOffset = this.seq): readonly SessionEvent[];\n    ownEvents(): readonly SessionEvent[];\n    isOwnSeq(seq: SessionSeq): boolean;\n    get seq(): SessionLogOffset;\n    append<T extends SessionEventType>(type: T, data: SessionEventMap[T], ...opts: T extends SurfaceEventType ? [\n        opts: SurfaceIntent<T>\n    ] : [\n    ]): SessionEvent<T>;\n    requestHeader(): EpochHeader | undefined;\n    requestContext(): RequestContext | undefined;\n    toolHistory():  /* …truncated — full shape in source */',
   },
   {
     name: 'SessionAccess',
@@ -7091,7 +7125,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SessionEventMap',
-    declaration: 'export interface SessionEventMap {\n    \'turn/start\': {\n        turn: number;\n    };\n    \'turn/end\': {\n        turn: number;\n        reason: TurnEndReason;\n    };\n    \'step/start\': {\n        turn: number;\n        step: number;\n    };\n    \'step/end\': {\n        turn: number;\n        step: number;\n    };\n    \'user/message\': UserMessage;\n    \'developer/message\': {\n        turn: number;\n        step: number;\n        message: DeveloperMessage;\n        headerSeq?: SessionSeq;\n    };\n    \'system/message\': {\n        turn: number;\n        step: number;\n        message: SystemMessage;\n    };\n    \'assistant/message\': {\n        turn: number;\n        step: number;\n        message: AssistantMessage;\n        stream: AssistantStreamRecord[];\n        usage?: TokenUsage;\n        interrupted?: true;\n    };\n    \'assistant/attempt\': {\n        turn: number;\n        step: number;\n        stream: AssistantStreamRecord[];\n    };\n    \'tool/call\': {\n        turn: number;\n        step: number;\n        callId: ToolCallId;\n        name: string;\n        arguments: string;\n    };\n    \'tool/result\': {\n        turn: number;\n        step: number;\n        message: ToolResultMessage;\n        error?: {\n            name: string;\n            code: string;\n            reason?: string;\n        };\n        meta?: JsonValue;\n    };\n    \'request/header\': {\n        header: EpochHeader;\n        reason: RequestHeaderReason;\n        startsSeries?: true;\n    };\n    \'request/context\': RequestContext;\n    \'session/end-seed\': {\n   /* …truncated — full shape in source */',
+    declaration: 'export interface SessionEventMap {\n    \'turn/start\': {\n        turn: number;\n    };\n    \'turn/end\': {\n        turn: number;\n        reason: TurnEndReason;\n    };\n    \'step/start\': {\n        turn: number;\n        step: number;\n    };\n    \'step/end\': {\n        turn: number;\n        step: number;\n    };\n    \'user/message\': UserMessage;\n    \'developer/message\': {\n        turn: number;\n        step: number;\n        message: DeveloperMessage;\n        headerSeq?: SessionSeq;\n    };\n    \'system/message\': {\n        turn: number;\n        step: number;\n        message: SystemMessage;\n    };\n    \'assistant/message\': {\n        turn: number;\n        step: number;\n        message: AssistantMessage;\n        stream: AssistantStreamRecord[];\n        usage?: TokenUsage;\n        interrupted?: true;\n    };\n    \'assistant/attempt\': {\n        turn: number;\n        step: number;\n        stream: AssistantStreamRecord[];\n    };\n    \'tool/call\': {\n        turn: number;\n        step: number;\n        callId: ToolCallId;\n        name: string;\n        arguments: string;\n    };\n    \'tool/result\': {\n        turn: number;\n        step: number;\n        message: ToolResultMessage;\n        error?: {\n            name: string;\n            code: string;\n            reason?: string;\n        };\n        meta?: JsonValue;\n        durationMs?: number;\n    };\n    \'task/start\': {\n        taskId: string;\n        kind: string;\n        ownerTaskId?: string;\n        replayPolicy?: \'safe\' | \'unsafe\';\n        input?: JsonValue; /* …truncated — full shape in source */',
   },
   {
     name: 'SessionEventMetadataFilter',
@@ -7144,6 +7178,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SessionEventType',
     declaration: 'export type SessionEventType = keyof SessionEventMap;',
+  },
+  {
+    name: 'SessionEventWatch',
+    declaration: 'export interface SessionEventWatch extends AsyncIterableIterator<SessionEvent> {\n    readonly end: Promise<SessionWatchEnd>;\n}',
   },
   {
     name: 'SessionEventWindow',
@@ -7536,6 +7574,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SessionUpdateQueueValue',
     declaration: 'export interface SessionUpdateQueueValue {\n    readonly accepted: true;\n}',
+  },
+  {
+    name: 'SessionWatchEnd',
+    declaration: 'export type SessionWatchEnd = {\n    readonly reason: \'closed\';\n} | {\n    readonly reason: \'session_failed\';\n    readonly error: unknown;\n};',
   },
   {
     name: 'SessionWireEvent',
@@ -8198,6 +8240,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface ToolCallBlock {\n    type: \'tool-call\';\n    id: ToolCallId;\n    name: string;\n    arguments: string;\n}',
   },
   {
+    name: 'ToolCaller',
+    declaration: 'export type ToolCaller = \'model\' | \'tools\';',
+  },
+  {
     name: 'ToolCallId',
     declaration: 'export type ToolCallId = Branded<\'ToolCallId\'>;',
   },
@@ -8219,7 +8265,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ToolDefinition',
-    declaration: 'export interface ToolDefinition extends ToolSchema {\n    readonly output: ToolOutputDefinition;\n    execute(args: unknown, exec: ToolRunContext): Promise<unknown>;\n    projectContent?(exec: Readonly<ToolExecution>, result: Readonly<ToolExecutionResult>): ContentBlock[] | undefined;\n    finalizeContent?(exec: Readonly<ToolExecution>, result: Readonly<ToolExecutionResult>): ContentBlock[] | undefined;\n    timeoutMs?: number;\n    isConcurrencySafe?(args: unknown): boolean;\n    presentCall?(args: unknown): ToolCallView | undefined;\n    presentResult?(args: unknown, result: ToolResult): ToolResultView | undefined;\n}',
+    declaration: 'export interface ToolDefinition extends ToolSchema {\n    readonly callers?: readonly ToolCaller[];\n    readonly replay?: ToolReplayPolicy;\n    readonly output: ToolOutputDefinition;\n    execute(args: unknown, exec: ToolRunContext): Promise<unknown>;\n    projectContent?(exec: Readonly<ToolExecution>, result: Readonly<ToolExecutionResult>): ContentBlock[] | undefined;\n    finalizeContent?(exec: Readonly<ToolExecution>, result: Readonly<ToolExecutionResult>): ContentBlock[] | undefined;\n    timeoutMs?: number;\n    isConcurrencySafe?(args: unknown): boolean;\n    presentCall?(args: unknown): ToolCallView | undefined;\n    presentResult?(args: unknown, result: ToolResult): ToolResultView | undefined;\n}',
   },
   {
     name: 'ToolDispatchExecution',
@@ -8311,11 +8357,11 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ToolRunContext',
-    declaration: 'export interface ToolRunContext extends ToolExecution {\n    deferContext(context: UserMessage): void;\n    concludeTurn(): void;\n}',
+    declaration: 'export interface ToolRunContext extends ToolExecution {\n    deferContext(context: UserMessage): void;\n    concludeTurn(): void;\n    executeTool?(name: string, args: unknown, options?: NestedToolExecutionOptions): Promise<NestedToolExecutionResult>;\n}',
   },
   {
     name: 'ToolRuntime',
-    declaration: 'export class ToolRuntime extends Service {\n    static inject;\n    static Config: z<Config>;\n    readonly [TOOL_RUNTIME_SCHEDULER]: ToolRuntimeScheduler;\n    constructor(ctx: Context, config: Config = {});\n    presentAs(mode: ToolPresentationMode): () => void;\n    register(definition: ToolDefinition): () => void;\n    restrict(filter: ToolRestriction): () => void;\n    guard(guard: ToolGuard): () => void;\n    get(name: string, scope?: ScopeKey): ToolDefinition | undefined;\n    schemas(scope?: ScopeKey): ToolSchema[];\n    executionMode(exec: ToolExecutionInput): ToolExecutionMode;\n    async execute(exec: ToolExecutionInput): Promise<ToolExecutionResult>;\n}',
+    declaration: 'export class ToolRuntime extends Service {\n    static inject;\n    static Config: z<Config>;\n    readonly [TOOL_RUNTIME_SCHEDULER]: ToolRuntimeScheduler;\n    constructor(ctx: Context, config: Config = {});\n    presentAs(mode: ToolPresentationMode): () => void;\n    register(definition: ToolDefinition): () => void;\n    restrict(filter: ToolRestriction): () => void;\n    guard(guard: ToolGuard): () => void;\n    get(name: string, scope?: ScopeKey): ToolDefinition | undefined;\n    replayPolicy(name: string, scope?: ScopeKey): ToolReplayPolicy;\n    searchTools(query: string, scope?: ScopeKey, limit: number = 8, caller: ToolCaller = \'model\'): ToolSchema[];\n    schemas(scope?: ScopeKey): ToolSchema[];\n    schemasForCaller(caller: ToolCaller, scope?: ScopeKey): ToolSchema[];\n    executionMode(exec: ToolExecutionInput): ToolExecutionMode;\n    async execute(exec: ToolExecutionInput): Promise<ToolExecutionResult>;\n}',
   },
   {
     name: 'ToolRuntimeScheduler',

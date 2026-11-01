@@ -3,7 +3,7 @@
 import { HarnessError } from '@deepseek-ai/dsh-llm'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
-import type { ToolDefinition, ToolExecution, ToolExecutionResult, ToolRunContext, ToolResult } from './index.ts'
+import type { ToolCaller, ToolDefinition, ToolExecution, ToolExecutionResult, ToolReplayPolicy, ToolRunContext, ToolResult } from './index.ts'
 import { assertSupportedJsonSchema, isJsonSchemaRecord, isPlainJsonArray, JsonSchemaError, validateJsonSchemaValue } from './json-schema.ts'
 import type { JsonSchemaNode, JsonSchemaScalar, ObjectJsonSchema } from './json-schema.ts'
 import type { ToolCallView, ToolResultView } from './presentation.ts'
@@ -496,6 +496,10 @@ export interface DefineToolOptions<S extends ParameterSchemaSpec, O extends Valu
     /** Pure replayable presentation metadata for native and nested calls. */
     presentationMeta?(args: InferArgs<S>, value: InferValue<NoInfer<O>>): JsonValue
   }
+  /** Caller classes allowed to execute the tool; omission allows both. */
+  readonly callers?: readonly ToolCaller[]
+  /** Recovery policy for a call interrupted after its intent was recorded. */
+  readonly replay?: ToolReplayPolicy
   /** Requests deferred loading of the tool definition; see {@link @deepseek-ai/dsh-llm#ToolSchema.deferLoading}. */
   readonly deferLoading?: true
   /** Optional positive cooperative timeout budget in milliseconds. */
@@ -592,6 +596,8 @@ export function defineTool<const S extends ParameterSchemaSpec, const O extends 
         },
       } : {},
     },
+    ...(options.callers !== undefined ? { callers: [...options.callers] } : {}),
+    ...(options.replay !== undefined ? { replay: options.replay } : {}),
     ...(options.deferLoading === true ? { deferLoading: options.deferLoading } : {}),
     ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
     async execute(args: unknown, exec: ToolRunContext): Promise<JsonValue> {

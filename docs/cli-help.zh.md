@@ -116,6 +116,8 @@ Arguments:
 Options:
   --json             write newline-delimited run events to stdout instead of the
                      final message
+  --diagnostics      with --json, append durable graph, inbox, and capability
+                     state
   --session-id <id>  adopt the persisted Session with this id; an unknown id is
                      an error
   -h, --help         show this help
@@ -124,6 +126,7 @@ Examples:
   dsh --profile headless "run the tests"          answer one task and exit
   echo "run the tests" | dsh --profile headless   read the task from stdin
   dsh --profile headless --json "run the tests"   emit machine-readable run events
+  dsh --profile headless --json --diagnostics "run the tests"   include durable bot state
   dsh --profile headless --session-id session-… "continue"   resume an existing Session
 
 ```

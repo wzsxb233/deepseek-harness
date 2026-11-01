@@ -17,6 +17,9 @@ export const TOOL_NOT_STARTED = 'TOOL_NOT_STARTED'
 /** Recovery code for a recorded tool call whose completed outcome was not durably recorded. */
 export const TOOL_OUTCOME_UNKNOWN = 'TOOL_OUTCOME_UNKNOWN'
 
+/** Recovery classification supplied by the tool registry without coupling Session to tools. */
+export type ToolReplayPolicy = 'safe' | 'unsafe'
+
 /**
  * Why an open tail turn is closed with synthetic events: `interrupted` is
  * crash recovery over a persisted log; `forked` is a fork seed cut inside the
@@ -28,14 +31,21 @@ export const TOOL_OUTCOME_UNKNOWN = 'TOOL_OUTCOME_UNKNOWN'
  */
 export type OpenTurnCloseCause = { readonly kind: 'interrupted' } | { readonly kind: 'forked' }
 
+/** Optional crash-recovery policy for calls that may be retried before closing the tail. */
+export interface OpenTurnCloseOptions {
+  readonly replaySafe?: (name: string) => boolean
+}
+
 /** Model-visible wording of the synthetic error tool results, keyed by cause. */
 const CLOSER_TEXT = {
   interrupted: {
     started: 'The tool call was interrupted after it was recorded, but no result was durably recorded. Its outcome is unknown. Decide whether to retry from the tool semantics: retry only if the operation is read-only or idempotent; if it may have side effects, first verify external state or ask the user. Do not retry blindly.',
+    safeStarted: 'The tool call was interrupted after it was recorded, but this tool is declared replay-safe. Retry it now.',
     notStarted: 'The tool call was interrupted before the Harness recorded it as started. Retry it if it is still needed.',
   },
   forked: {
     started: 'The history inherited by this branch records this tool call starting but does not include its result. The parent session may have completed it after the fork point. Decide whether to retry from the tool semantics: retry only if the operation is read-only or idempotent; if it may have side effects, first verify external state or ask the user. Do not retry blindly.',
+    safeStarted: 'The inherited tool call has no result, and this tool is declared replay-safe. Retry it in this branch after considering the parent history.',
     notStarted: 'The history inherited by this branch has no record of this tool call starting. The parent session may have executed it after the fork point. Decide whether to retry from the tool semantics: retry only if the operation is read-only or idempotent; if it may have side effects, first verify external state or ask the user. Do not retry blindly.',
   },
 } as const
@@ -48,12 +58,20 @@ const CLOSER_TEXT = {
  *
  * @param events - the loaded durable log to scan (a valid committed prefix, possibly with a crash tail).
  * @param cause - the owning close operation: selects result wording and the turn-ending reason.
+ * @param options - optional replay-safe policy for calls that will be re-executed before tail repair.
  * @returns the synthetic closer events to append after `events`, in order; empty when the log is already balanced.
  */
-export function openTurnClosers(events: readonly SessionEvent[], cause: OpenTurnCloseCause): SessionEvent[] {
+export function openTurnClosers(
+  events: readonly SessionEvent[], cause: OpenTurnCloseCause, options: OpenTurnCloseOptions = {},
+): SessionEvent[] {
   let openTurn: number | null = null
   let openStep: number | null = null
-  const recovery = new ToolCallRecovery(cause)
+  const deferred = new Set<string>()
+  const recovery = new ToolCallRecovery(cause, (name) => {
+    const safe = options.replaySafe?.(name) === true
+    if (safe) deferred.add(name)
+    return safe ? 'safe' : 'unsafe'
+  }, options.replaySafe)
   for (const event of events) {
     recovery.observe(event)
     switch (event.type) {
@@ -86,6 +104,9 @@ export function openTurnClosers(events: readonly SessionEvent[], cause: OpenTurn
   // synthetic closers (reusing the last timestamp keeps them deterministic and
   // never invents a "future" time).
   const closers: SessionEvent[] = recovery.results()
+  // A deferred replay still owns its original open step and turn. Closing
+  // either now would hide its unanswered intent from the next crash recovery.
+  if (deferred.size > 0) return closers
   let seq = last.seq + closers.length + 1
   const time = last.time
 
@@ -103,11 +124,15 @@ export function openTurnClosers(events: readonly SessionEvent[], cause: OpenTurn
  * its step closes. This state retains pending identities, not event history.
  */
 export class ToolCallRecovery {
-  private readonly pendingCalls = new Map<ToolCallId, { turn: number; step: number; callSeq?: SessionSeqType }>()
+  private readonly pendingCalls = new Map<ToolCallId, { turn: number; step: number; name: string; callSeq?: SessionSeqType }>()
   private last: Pick<SessionEvent, 'seq' | 'time'> | undefined
 
   /** @param cause - defaults to interrupted live/crash recovery; fork-seed construction supplies its own cause. */
-  constructor(private readonly cause: OpenTurnCloseCause = { kind: 'interrupted' }) {}
+  constructor(
+    private readonly cause: OpenTurnCloseCause = { kind: 'interrupted' },
+    private readonly replayPolicy: (name: string) => ToolReplayPolicy = () => 'unsafe',
+    private readonly replaySafe?: (name: string) => boolean,
+  ) {}
 
   /**
    * Consume the next committed event; closed steps and turn boundaries discard pending requests.
@@ -124,7 +149,7 @@ export class ToolCallRecovery {
       case 'assistant/message':
         for (const block of event.data.message.content) {
           if (block.type === 'tool-call') {
-            this.pendingCalls.set(block.id, { turn: event.data.turn, step: event.data.step })
+            this.pendingCalls.set(block.id, { turn: event.data.turn, step: event.data.step, name: block.name })
           }
         }
         break
@@ -163,8 +188,10 @@ export class ToolCallRecovery {
     const text = CLOSER_TEXT[this.cause.kind]
     // Close calls before their step: providers reject dangling assistant calls,
     // and Map insertion order preserves their transcript order.
-    for (const [callId, { turn, step, callSeq }] of this.pendingCalls) {
+    for (const [callId, { turn, step, name, callSeq }] of this.pendingCalls) {
       const started = callSeq !== undefined
+      const safe = started && this.replayPolicy(name) === 'safe'
+      if (safe && this.replaySafe?.(name) === true) continue
       const message: ToolResultMessage = deepFreeze({
         id: brandString<MessageId>(`${this.cause.kind}-tool-result-${callId}-${seq}`),
         role: 'tool',
@@ -173,7 +200,7 @@ export class ToolCallRecovery {
         source: { kind: 'tool', callId },
         content: [{
           type: 'text',
-          text: started ? text.started : text.notStarted,
+          text: started ? safe ? text.safeStarted : text.started : text.notStarted,
         }],
       })
       results.push({
@@ -204,8 +231,9 @@ export class ToolCallRecovery {
  * `./fork.ts`.
  *
  * @param events - the persisted log to scan, possibly ending inside an open turn.
+ * @param options - optional replay-safe policy for calls that will be re-executed before tail repair.
  * @returns the synthetic `interrupted` closer events to append after `events`; empty when the log is already balanced.
  */
-export function interruptedTurnClosers(events: readonly SessionEvent[]): SessionEvent[] {
-  return openTurnClosers(events, { kind: 'interrupted' })
+export function interruptedTurnClosers(events: readonly SessionEvent[], options: OpenTurnCloseOptions = {}): SessionEvent[] {
+  return openTurnClosers(events, { kind: 'interrupted' }, options)
 }

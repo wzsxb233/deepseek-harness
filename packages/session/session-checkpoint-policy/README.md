@@ -45,7 +45,7 @@ No configuration fields exist; the plugin is a single load beside one persistenc
 
 ### What becomes durable
 
-Three barriers are checkpointed. The model request is flushed before the adapter stream is constructed, so a crash before a response cannot replay an unpersisted request. A top-level tool call is flushed before the tool body runs, so a recorded call is durable before any external side effect; nested tool dispatches reuse the outer call's checkpoint. At each `agent/pre-step` boundary, everything the preceding step committed — its response and ordered tool results — is flushed before the next request is derived.
+Three barriers are checkpointed. The model request is flushed before the adapter stream is constructed, so a crash before a response cannot replay an unpersisted request. Every tool call, including nested dispatches, is flushed before its body runs, so journal admission is durable before any external side effect. At each `agent/pre-step` boundary, everything the preceding step committed — its response and ordered tool results — is flushed before the next request is derived.
 
 ### Observable behavior and failures
 

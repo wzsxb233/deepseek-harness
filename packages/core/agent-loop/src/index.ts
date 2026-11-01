@@ -22,9 +22,9 @@ import type {
   SessionStartSource,
   TurnBoundaryProjection,
 } from '@deepseek-ai/dsh-agent'
-import { errorChain, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
+import { createToolResultMessage, createUserMessage, errorChain, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import { interruptedTurnClosers, SessionLogOffset, SessionPreparation, SessionSeq } from '@deepseek-ai/dsh-session'
-import type { Session, SessionHeader, SessionId } from '@deepseek-ai/dsh-session'
+import type { Session, SessionEvent, SessionHeader, SessionId } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-system-prompt'
 import type {} from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-session-projection'
@@ -42,6 +42,52 @@ const INACTIVE_STATES: ReadonlySet<FiberState> = new Set([
   FiberState.DISPOSED,
   FiberState.FAILED,
 ])
+
+/** Detect a started replay-safe call in an interrupted tail before the closer is appended. */
+interface ReplaySafeCall {
+  callId: SessionEvent<'tool/call'>['data']['callId']
+  name: string
+  arguments: string
+  callSeq: SessionSeq
+  turn: number
+  step: number
+}
+
+function replaySafeCalls(events: readonly SessionEvent[]): ReplaySafeCall[] {
+  const pending = new Map<string, { callId: ReplaySafeCall['callId']; name: string; arguments: string; callSeq?: SessionSeq; turn?: number; step?: number }>()
+  for (const event of events) {
+    switch (event.type) {
+      case 'turn/start':
+      case 'turn/end':
+      case 'step/end':
+        pending.clear()
+        break
+      case 'assistant/message':
+        for (const block of event.data.message.content) {
+          if (block.type === 'tool-call') pending.set(String(block.id), { callId: block.id, name: block.name, arguments: block.arguments })
+        }
+        break
+      case 'tool/call': {
+        const call = pending.get(String(event.data.callId))
+        if (call) {
+          call.arguments = event.data.arguments
+          call.callSeq = event.seq
+          call.turn = event.data.turn
+          call.step = event.data.step
+        }
+        break
+      }
+      case 'tool/result':
+        pending.delete(String(event.data.message.source.callId))
+        break
+      default:
+        break
+    }
+  }
+  return [...pending.values()].flatMap(call => call.callSeq !== undefined && call.turn !== undefined && call.step !== undefined
+    ? [{ callId: call.callId, name: call.name, arguments: call.arguments, callSeq: call.callSeq, turn: call.turn, step: call.step }]
+    : [])
+}
 
 const turnBoundaryProjectionSchema: zod.ZodType<TurnBoundaryProjection> = zod.object({
   openTurnStartSeq: zod.number().int().nonnegative().transform(SessionSeq).nullable(),
@@ -797,6 +843,7 @@ export class AgentLoop extends Service implements AgentFactory {
     source: SessionStartSource,
     stored?: StoredSession,
     parentAgent?: Agent,
+    recover?: (agent: Agent, signal: AbortSignal) => Promise<void>,
   ): Promise<AgentHandle> {
     using ownedPreparation = preparation
     const session = ownedPreparation.session
@@ -811,7 +858,9 @@ export class AgentLoop extends Service implements AgentFactory {
       const setupCommit = await raceAbort(setup?.(prepared.agent.ctx, prepared.agent), prepared.signal, id)
       setupCommit?.commit()
       await this.appendUnstoredSuffix(stored, session)
-      return await prepared.publish(source)
+      const handle = await prepared.publish(source)
+      await recover?.(handle.agent, prepared.signal)
+      return handle
     })
   }
 
@@ -871,6 +920,8 @@ export class AgentLoop extends Service implements AgentFactory {
       let handle: SessionHandle | undefined
       let stored: StoredSession | undefined
       let preparation: SessionPreparation | undefined
+      let replayCalls: ReplaySafeCall[] = []
+      let recoveryEvents: SessionEvent[] = []
       try {
         try {
           // Taking write ownership FIRST excludes a concurrent resume of the
@@ -888,7 +939,15 @@ export class AgentLoop extends Service implements AgentFactory {
           const coldRead = await handle.read(0, undefined, { signal: fused })
           fused.throwIfAborted()
           const persisted = coldRead.events
-          const closers = interruptedTurnClosers(persisted)
+          recoveryEvents = [...persisted]
+          const pending = replaySafeCalls(persisted)
+          // Setup may install scoped tools or shadow a global replay policy.
+          // Delay tail closure until that scope is known; never close a step
+          // before the replay receipt has reached durable storage.
+          const deferRecovery = pending.some(call => this.runtime.ctx.tools.replayPolicy(call.name) === 'safe')
+            || (pending.length > 0 && options.setup !== undefined)
+          replayCalls = deferRecovery ? pending : []
+          const closers = deferRecovery ? [] : interruptedTurnClosers(persisted)
           if (closers.length > 0) await handle.append(closers)
           preparation = SessionPreparation.create(this.runtime.ctx.sessions.prepare(id, {
             seed: [...persisted, ...closers],
@@ -905,7 +964,7 @@ export class AgentLoop extends Service implements AgentFactory {
         if (!this.ownership.isActive()) throw new Error('agent loop is not active')
         const owned = stored
         handle = undefined // ownership passes to setupAndPublish/prepare
-        return await this.setupAndPublish(
+        const publishedHandle = await this.setupAndPublish(
           ownerCtx,
           id,
           preparation,
@@ -915,7 +974,51 @@ export class AgentLoop extends Service implements AgentFactory {
           'resume',
           owned,
           options.parentAgent,
+          replayCalls.length === 0 ? undefined : async (agent, signal) => {
+            let replayed = false
+            for (const call of replayCalls) {
+              signal.throwIfAborted()
+              if (agent.ctx.tools.replayPolicy(call.name, agent) !== 'safe') continue
+              let args: unknown
+              try { args = call.arguments.length === 0 ? {} : JSON.parse(call.arguments) } catch { args = call.arguments }
+              const result = await agent.ctx.tools.execute({
+                callId: call.callId,
+                name: call.name,
+                arguments: args,
+                agent,
+                signal,
+              })
+              // An aborted invocation can have an unknown outcome. Keep its
+              // intent open so the next owner can safely recover it again.
+              signal.throwIfAborted()
+              recoveryEvents.push(agent.session.append('tool/result', {
+                turn: call.turn,
+                step: call.step,
+                message: createToolResultMessage({ callId: call.callId, content: result.content, isError: result.isError }),
+                ...result.error?.info === undefined ? {} : { error: result.error.info },
+                ...result.meta === undefined ? {} : { meta: result.meta },
+              }, { surfaceOp: 'append', sourceEventSeqs: [call.callSeq] }))
+              await agent.ctx.sessions.flush(agent.session)
+              replayed = true
+            }
+            for (const closer of interruptedTurnClosers(recoveryEvents)) {
+              switch (closer.type) {
+                case 'tool/result':
+                  agent.session.append('tool/result', closer.data, { surfaceOp: 'append', ...closer.sourceEventSeqs === undefined ? {} : { sourceEventSeqs: closer.sourceEventSeqs } })
+                  break
+                case 'step/end': agent.session.append('step/end', closer.data); break
+                case 'turn/end': agent.session.append('turn/end', closer.data); break
+                default: throw new Error(`unexpected interrupted-turn closer: ${closer.type}`)
+              }
+            }
+            await agent.ctx.sessions.flush(agent.session)
+            if (replayed) agent.followup(createUserMessage({
+              content: [{ type: 'text', text: 'A replay-safe tool call was automatically re-executed after recovery. Continue from its result.' }],
+              source: { kind: 'runtime-context' },
+            }))
+          },
         )
+        return publishedHandle
       } finally {
         preparation?.[Symbol.dispose]()
         await handle?.close().catch(() => {})

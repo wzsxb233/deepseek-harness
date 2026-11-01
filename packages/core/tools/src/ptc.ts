@@ -22,14 +22,29 @@ import { approveEscalation, ESCALATION_TARGETS, validateEscalationArgs } from '@
 import type { SandboxExecutionPolicy } from '@deepseek-ai/dsh-sandbox'
 import type { ApprovalService } from '@deepseek-ai/dsh-user-approval'
 import { deepFreeze, snapshotJsonValue, type JsonValue } from '@deepseek-ai/dsh-util-values'
+import { TOOL_OUTCOME_UNKNOWN } from '@deepseek-ai/dsh-session'
 import { defineTool, parameterSchemaSpecToJsonSchema } from './schema.ts'
 import { PtcCalls } from './ptc-calls.ts'
+import { foldPtcDispatchJournal } from './ptc-journal.ts'
 import { TOOL_RUNTIME_SCHEDULER } from './index.ts'
 import type { PtcDispatchLog, ToolDefinition, ToolExecutionResult, ToolRuntime, ToolRunContext } from './index.ts'
 import type {} from './types.ts'
 
 /** The model-facing name of the PTC mode tool. */
 export const RUN_CODE_NAME = 'run_code'
+
+/** Journal protocol version; bump when replay-visible value mapping changes. */
+const PTC_JOURNAL_VERSION = 1
+
+/** Small deterministic source fingerprint that works in Node and browser hosts. */
+function programFingerprint(program: string): string {
+  let hash = 0x811c9dc5
+  for (let index = 0; index < program.length; index++) {
+    hash ^= program.charCodeAt(index)
+    hash = Math.imul(hash, 0x01000193)
+  }
+  return `fnv1a-${(hash >>> 0).toString(16).padStart(8, '0')}`
+}
 
 /**
  * The language-specific `run_code` schema text: the tool `description` and its
@@ -193,6 +208,68 @@ function jsonNormalizeArgs(value: unknown): { dispatched: unknown; logged: unkno
     throw new Error('tool arguments could not be detached for durable logging')
   }
   return { dispatched: snapshot, logged }
+}
+
+interface ReplayDispatch {
+  readonly name: string
+  readonly arguments: unknown
+  readonly isError: boolean
+  readonly content: ContentBlock[]
+  readonly value?: JsonValue
+  readonly error?: { name: string; code: string; reason?: string }
+  readonly meta?: JsonValue
+}
+
+/** Find a fully settled earlier run of the same source for deterministic replay. */
+function findReplayDispatches(exec: ToolRunContext, code: string, fingerprint: string): ReplayDispatch[] | undefined {
+  const session = exec.agent?.session
+  if (session === undefined) return undefined
+  if (!('snapshotEvents' in session)) return undefined
+  // oxlint-disable-next-line typescript/no-deprecated -- replay reads one explicit immutable log snapshot.
+  const events = session.snapshotEvents()
+  const rawEvents = events as readonly { type: string; data: unknown }[]
+  const candidates = rawEvents
+    .filter(event => event.type === 'tool/call')
+    .map(event => ({ event, data: event.data as { callId: ToolCallId; name: string; arguments: string } }))
+  for (let index = candidates.length - 1; index >= 0; index--) {
+    const call = candidates[index]
+    if (call === undefined || call.data.callId === exec.callId || call.data.name !== RUN_CODE_NAME) continue
+    let parsed: unknown
+    try { parsed = call.data.arguments.length === 0 ? {} : JSON.parse(call.data.arguments) } catch { continue }
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) continue
+    if ((parsed as { code?: unknown }).code !== code) continue
+    if (events.some(event => event.type === 'tool/result'
+      && event.data.message.source.callId === call.data.callId
+      && event.data.error?.code !== TOOL_OUTCOME_UNKNOWN)) return undefined
+    const journal = foldPtcDispatchJournal(events, call.data.callId)
+    if (!journal.replayable) throw new CodeRunFailedError('Cannot replay the interrupted program: nested tool outcomes are unknown or its journal is inconsistent. Verify external state before starting a new program.')
+    if (journal.entries.length === 0) return undefined
+    if (journal.entries.some((entry) => {
+      const start = entry.start.data
+      const settle = entry.settle?.data
+      return start.programFingerprint !== fingerprint
+        || start.journalVersion !== PTC_JOURNAL_VERSION
+        || settle === undefined
+        || settle.programFingerprint !== fingerprint
+        || settle.journalVersion !== PTC_JOURNAL_VERSION
+        || (!settle.isError && settle.value === undefined)
+    })) throw new CodeRunFailedError('Cannot replay the interrupted program: its journal version, program fingerprint, or canonical results are incompatible.')
+    return journal.entries.map((entry) => {
+      const start = entry.start.data
+      const settle = entry.settle?.data
+      if (settle === undefined) throw new Error('codemode replay journal pairing changed while reading')
+      return {
+        name: start.name,
+        arguments: start.arguments,
+        isError: settle.isError,
+        content: settle.content,
+        ...settle.value === undefined ? {} : { value: settle.value },
+        ...settle.error === undefined ? {} : { error: settle.error },
+        ...settle.meta === undefined ? {} : { meta: settle.meta },
+      }
+    })
+  }
+  return undefined
 }
 
 /** Two-space JSON presentation, matching the existing shallow `run_code` text contract. */
@@ -410,11 +487,14 @@ export function createRunCodeTool(registry: ToolRuntime, options: RunCodeBridgeO
         // run settles for ANY reason, so an in-flight sub-dispatch is aborted
         // (its executor kills on this signal) instead of orphaned, and
         // queued-unstarted dispatches are abandoned.
+        const fingerprint = programFingerprint(args.code)
+        const replayDispatches = findReplayDispatches(exec, args.code, fingerprint)
         const runController = new AbortController()
         const onOuterAbort = (): void => { runController.abort(callSignal.reason) }
         callSignal.addEventListener('abort', onOuterAbort, { once: true })
 
         let dispatches = 0
+        let replayIndex = 0
         // The per-run scheduler uses the registry's staged interface and follows
         // the same concurrency rules as the native loop. It also follows the
         // native loop's SEQUENCING: every ordered stage (the dispatch-start
@@ -554,6 +634,33 @@ export function createRunCodeTool(registry: ToolRuntime, options: RunCodeBridgeO
             parent: exec.token,
             signal: runController.signal,
           }
+          const replay = replayDispatches?.[replayIndex]
+          if (replayDispatches !== undefined && replayIndex < replayDispatches.length) {
+            if (replay === undefined
+              || replay.name !== name
+              || JSON.stringify(replay.arguments) !== JSON.stringify(normalized.dispatched)) {
+              throw new Error(`codemode replay diverged at ${name}: the call order or arguments changed`)
+            }
+            replayIndex++
+            const agent = exec.agent
+            if (agent !== undefined) {
+              agent.session.append('tool/ptc-dispatch-start', {
+                rootCallId: exec.rootCallId, parentCallId: exec.callId, subCallId, name,
+                arguments: normalized.logged, programFingerprint: fingerprint, journalVersion: PTC_JOURNAL_VERSION,
+              })
+              agent.session.append('tool/ptc-dispatch', {
+                rootCallId: exec.rootCallId, parentCallId: exec.callId, subCallId, name,
+                arguments: normalized.logged, isError: replay.isError, content: replay.content,
+                ...replay.value === undefined ? {} : { value: replay.value },
+                ...replay.error === undefined ? {} : { error: replay.error },
+                ...replay.meta === undefined ? {} : { meta: replay.meta },
+                programFingerprint: fingerprint, journalVersion: PTC_JOURNAL_VERSION,
+              })
+            }
+            if (replay.isError) throw new Error(replay.error?.reason ?? replay.error?.code ?? 'replayed tool call failed')
+            if (replay.value === undefined) throw new Error(`codemode replay for ${name} has no canonical value`)
+            return replay.value
+          }
           type DispatchOutcome = { isError: true; message: string } | { isError: false; value: JsonValue }
           const scheduler = registry[TOOL_RUNTIME_SCHEDULER]
           const outcome = await new Promise<DispatchOutcome>((resolve, reject) => {
@@ -561,6 +668,7 @@ export function createRunCodeTool(registry: ToolRuntime, options: RunCodeBridgeO
             let parked:
               | { kind: 'post-result' | 'final-result'; exec: ToolRunContext; result: ToolExecutionResult }
               | undefined
+            let bodyStartedAt: number | undefined
             const settle = (result: ToolExecutionResult): void => {
               // The program gets its value NOW: the log-content listener (for
               // example, a spill backend) must never delay the binding or occupy
@@ -594,9 +702,13 @@ export function createRunCodeTool(registry: ToolRuntime, options: RunCodeBridgeO
                   // this record from what it actually received.
                   arguments: normalized.logged,
                   isError: result.isError,
+                  ...bodyStartedAt === undefined ? {} : { durationMs: Math.max(0, performance.now() - bodyStartedAt) },
+                  ...result.isError ? {} : { value: result.value },
                   ...result.error?.info === undefined ? {} : { error: result.error.info },
                   content: logged,
                   ...result.meta === undefined ? {} : { meta: result.meta },
+                  programFingerprint: fingerprint,
+                  journalVersion: PTC_JOURNAL_VERSION,
                 })
               })().finally(() => { logWork.delete(task) })
               logWork.add(task)
@@ -617,12 +729,15 @@ export function createRunCodeTool(registry: ToolRuntime, options: RunCodeBridgeO
                   subCallId,
                   name,
                   arguments: normalized.logged,
+                  programFingerprint: fingerprint,
+                  journalVersion: PTC_JOURNAL_VERSION,
                 })
                 // Ordered prepare runs INSIDE the driver lane: the next entry's
                 // pre-execute waits for this resolution, as under the native
                 // scheduler. Only the launched body below overlaps.
                 const prepared = await scheduler.prepare(input)
                 if (prepared.kind === 'dispatch') {
+                  bodyStartedAt = performance.now()
                   this.flight = scheduler.dispatch(prepared.exec).then((dispatchOutcome) => {
                     parked = { kind: dispatchOutcome.kind, exec: prepared.exec, result: dispatchOutcome.result }
                     this.settled = true
@@ -684,11 +799,37 @@ export function createRunCodeTool(registry: ToolRuntime, options: RunCodeBridgeO
         // silently dropping the binding), and the runtime host resolves
         // binding names as own properties only.
         const functions: Record<string, PtcBindingFunction> = Object.create(null) as Record<string, PtcBindingFunction>
+        // Pi Durable-compatible discovery helper. It is host metadata rather
+        // than a registered tool task: search results are detached schemas,
+        // and a later model turn decides whether to call one.
+        const visibleSchemas = registry.schemasForCaller('tools', exec.agent)
+        if (visibleSchemas.some(schema => schema.name !== RUN_CODE_NAME)
+          && registry.get('searchTools', exec.agent) === undefined) {
+          Object.defineProperty(functions, 'searchTools', {
+            enumerable: true,
+            value: (rawArgs: unknown): Promise<JsonValue> => {
+              if (rawArgs === null || typeof rawArgs !== 'object' || Array.isArray(rawArgs)) {
+                throw new Error('searchTools expects an object with a string query')
+              }
+              const query = (rawArgs as { query?: unknown }).query
+              if (typeof query !== 'string') throw new Error('searchTools expects a string query')
+              const rawLimit = (rawArgs as { limit?: unknown }).limit
+              const limit = rawLimit === undefined ? 8 : Number(rawLimit)
+              if (!Number.isFinite(limit) || limit <= 0) throw new Error('searchTools limit must be positive')
+              const results: JsonValue[] = registry.searchTools(query, exec.agent, Math.floor(limit), 'tools').map(schema => ({
+                name: schema.name,
+                description: schema.description,
+                parameters: snapshotJsonValue(schema.parameters) as JsonValue,
+              }))
+              return Promise.resolve(results)
+            },
+          })
+        }
         // Enumerate the CALLING AGENT's visible set (scoped tools join,
         // restricted globals vanish) — the same view the SDK section declared,
         // so a program can bind exactly what its prompt promised; sub-dispatch
         // re-resolves per call through the same view (exec.agent threads down).
-        for (const schema of registry.schemas(exec.agent)) {
+        for (const schema of visibleSchemas) {
           if (schema.name === RUN_CODE_NAME) continue
           Object.defineProperty(functions, schema.name, { enumerable: true, value: binding(deepFreeze(schema)) })
         }
@@ -731,6 +872,16 @@ export function createRunCodeTool(registry: ToolRuntime, options: RunCodeBridgeO
             // Binding failures remain observable through their individual promises.
             runController.abort('run_code settled')
             await drainDispatches()
+          }
+
+          if (replayDispatches !== undefined && replayIndex !== replayDispatches.length && result.error === undefined) {
+            result = {
+              ...result,
+              error: {
+                kind: 'protocol',
+                message: `codemode replay diverged: replayed ${replayIndex} of ${replayDispatches.length} recorded tool calls`,
+              },
+            }
           }
 
           if (result.error) {

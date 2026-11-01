@@ -2,7 +2,7 @@ import { setSandboxMode } from '@deepseek-ai/dsh-sandbox-policy'
 import { describe, expect, it, onTestFinished, vi } from 'vitest'
 import { provideWorkingDirectoryFixture } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { Context } from '@deepseek-ai/cordis'
-import { createUserMessage, ToolCallId  } from '@deepseek-ai/dsh-llm'
+import { createToolResultMessage, createUserMessage, ToolCallId  } from '@deepseek-ai/dsh-llm'
 import type { ContextFormed } from '@deepseek-ai/dsh-llm'
 import type { ToolSchema } from '@deepseek-ai/dsh-llm'
 import { createScope } from '@deepseek-ai/dsh-scope'
@@ -13,7 +13,7 @@ import type { PtcRunRequest, PtcRunResult } from '@deepseek-ai/dsh-ptc-runtime'
 import ToolRuntime, { CodeRunFailedError, RUN_CODE_NAME, TOOL_ABORTED_BEFORE_DISPATCH, defineContentToolFixture, defineTool } from '@deepseek-ai/dsh-tools'
 import type { Config, JsonSchemaNode, PostToolDecision, ToolExecutionResult } from '@deepseek-ai/dsh-tools'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import SessionStore, { Session, SessionId } from '@deepseek-ai/dsh-session'
+import SessionStore, { Session, SessionId, TOOL_OUTCOME_UNKNOWN } from '@deepseek-ai/dsh-session'
 import ApprovalService, { type ApprovalOutcome, type ApprovalRequest } from '@deepseek-ai/dsh-user-approval'
 import type { SessionEventMap } from '@deepseek-ai/dsh-session'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
@@ -124,17 +124,59 @@ function fakeAgent(): { agent: Agent; events: { type: string; data: unknown }[] 
 async function runCode(
   ctx: Context,
   code: string,
-  extras: { agent?: Agent; signal?: AbortSignal; description?: string } = {},
+  extras: { agent?: Agent; signal?: AbortSignal; description?: string; callId?: ToolCallId } = {},
 ): Promise<ToolExecutionResult> {
   return ctx.tools.execute({
     signal: testToolSignal,
-    callId: ToolCallId('call-1'),
+    callId: extras.callId ?? ToolCallId('call-1'),
     name: RUN_CODE_NAME,
     arguments: { code, description: extras.description ?? 'Run the test program' },
     ...extras.agent ? { agent: extras.agent } : {},
     ...extras.signal ? { signal: extras.signal } : {},
   })
 }
+
+it.each(['complete', 'repaired', 'pending'] as const)('restores a %s codemode journal without repeating nested effects', async (state) => {
+  const { ctx, runtime } = await setup({ mode: 'ptc' })
+  const calls: unknown[] = []
+  ctx.tools.register(defineTool({
+    name: 'echo', description: 'Echo one value.', parameters: { value: { type: 'string', required: true } }, callers: ['tools'],
+    output: { schema: { type: 'string' }, render: (_args, value) => [{ type: 'text', text: value }] },
+    execute: async (args) => { calls.push(args); return args.value },
+  }))
+  const session = Session.create(SessionId('ptc-replay'))
+  const agent = { ctx, session } as Agent
+  const code = 'return await tools.echo({ value: "one" })'
+  const args = JSON.stringify({ description: 'Replay one call', code })
+  session.append('tool/call', { turn: 1, step: 1, callId: ToolCallId('call-1'), name: RUN_CODE_NAME, arguments: args })
+  runtime.behavior = async request => ({ value: await request.bindings[0]!.functions.echo!({ value: 'one' }), logs: [] })
+  await expect(runCode(ctx, code, { agent, callId: ToolCallId('call-1') })).resolves.toMatchObject({ isError: false })
+  expect(calls).toHaveLength(1)
+  if (state === 'repaired') session.append('tool/result', {
+    turn: 1, step: 1,
+    message: createToolResultMessage({ callId: ToolCallId('call-1'), content: [{ type: 'text', text: 'Interrupted' }], isError: true }),
+    error: { name: 'ToolOutcomeUnknownError', code: TOOL_OUTCOME_UNKNOWN },
+  }, { surfaceOp: 'append' })
+  const events = session.snapshotEvents()
+  const pendingEnd = events.findIndex(event => event.type === 'tool/ptc-dispatch')
+  const restored = Session.create(session.id, state === 'pending' ? events.slice(0, pendingEnd) : events, session.header)
+  const restoredAgent = { ctx, session: restored } as Agent
+  restored.append('tool/call', { turn: 1, step: 2, callId: ToolCallId('call-2'), name: RUN_CODE_NAME, arguments: args })
+  runtime.behavior = async request => ({ value: await request.bindings[0]!.functions.echo!({ value: 'one' }), logs: [] })
+  const replay = await runCode(ctx, code, { agent: restoredAgent, callId: ToolCallId('call-2') })
+  expect(replay.isError).toBe(state === 'pending')
+  if (state === 'pending') expect(replay.error?.info).toMatchObject({ code: 'CODE_RUN_FAILED' })
+  expect(calls).toHaveLength(1)
+  if (state !== 'pending') {
+    restored.append('tool/result', { turn: 1, step: 2,
+      message: createToolResultMessage({ callId: ToolCallId('call-2'), content: replay.content, isError: replay.isError }),
+    }, { surfaceOp: 'append' })
+    restored.append('tool/call', { turn: 1, step: 3, callId: ToolCallId('call-3'), name: RUN_CODE_NAME, arguments: args })
+    expect((await runCode(ctx, code, { agent: restoredAgent, callId: ToolCallId('call-3') })).isError).toBe(false)
+    expect(calls).toHaveLength(2)
+  }
+  await ctx.fiber.dispose()
+})
 
 it('logs detached frozen nested metadata without changing the binding value or log-content policy', async () => {
   const { ctx, runtime } = await setup({ mode: 'ptc' })
@@ -326,7 +368,7 @@ describe('mode-aware wire contribution', () => {
     })
     const result = await runCode(ctx, 'return Object.keys(tools)', { agent })
     expect(result.isError).toBe(false)
-    expect(result.content).toEqual([{ type: 'text', text: 'echo' }])
+    expect(result.content).toEqual([{ type: 'text', text: 'echo,searchTools' }])
 
     lift()
     const unrestricted = await systemPrompt.assemble({ scope: agent })
@@ -353,7 +395,7 @@ describe('mode-aware wire contribution', () => {
     })
     const result = await runCode(ctx, 'return Object.keys(tools)', { agent })
     expect(result.isError).toBe(false)
-    expect(result.content).toEqual([{ type: 'text', text: 'kept' }])
+    expect(result.content).toEqual([{ type: 'text', text: 'kept,searchTools' }])
   })
 
   it('reserves run_code against scoped shadows and explicit restrictions in mode ptc', async () => {
@@ -428,7 +470,7 @@ describe('mode-aware wire contribution', () => {
     }
     const result = await runCode(ctx, 'program')
     expect(result.isError).toBe(false)
-    expect(JSON.parse((result.content[0] as { text: string }).text)).toEqual({ names: ['echo'], runCode: 'undefined' })
+    expect(JSON.parse((result.content[0] as { text: string }).text)).toEqual({ names: ['echo', 'searchTools'], runCode: 'undefined' })
   })
 
   it('renders byte-identical SDK text across consecutive assemblies of an unchanged tool set', async () => {
@@ -1003,11 +1045,15 @@ describe('the run_code dispatch bridge', () => {
     expect(dispatches.map(event => event.data)).toEqual([
       {
         rootCallId: 'call-1', parentCallId: 'call-1', subCallId: 'call-1:ptc:1', name: 'echo',
-        arguments: { value: 'one' }, isError: false, content: [{ type: 'text', text: 'echo:one' }],
+        arguments: { value: 'one' }, isError: false, durationMs: expect.any(Number) as number,
+        value: 'echo:one', journalVersion: 1, programFingerprint: expect.any(String) as string,
+        content: [{ type: 'text', text: 'echo:one' }],
       },
       {
         rootCallId: 'call-1', parentCallId: 'call-1', subCallId: 'call-1:ptc:2', name: 'echo',
-        arguments: { value: 'two' }, isError: false, content: [{ type: 'text', text: 'echo:two' }],
+        arguments: { value: 'two' }, isError: false, durationMs: expect.any(Number) as number,
+        value: 'echo:two', journalVersion: 1, programFingerprint: expect.any(String) as string,
+        content: [{ type: 'text', text: 'echo:two' }],
       },
     ])
     expect(result.meta).toBeUndefined()

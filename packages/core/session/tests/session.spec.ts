@@ -1817,4 +1817,49 @@ describe('SessionStore', () => {
 
     expect(heard).toEqual([session])
   })
+
+  it('provides a lossless event watch and closes it with the Session lifecycle', async () => {
+    const session = Session.create(SessionId('session-watch'))
+    const watch = session.watch()
+    session.append('turn/start', { turn: 1 })
+    await expect(watch.next()).resolves.toMatchObject({ done: false, value: { type: 'turn/start', seq: 0 } })
+    const pending = watch.next()
+    session.close()
+    await expect(pending).resolves.toEqual({ value: undefined, done: true })
+    await expect(watch.end).resolves.toEqual({ reason: 'closed' })
+    await expect(session.closed).resolves.toEqual({ reason: 'closed' })
+  })
+
+  it('store detachment closes the Session and active watches', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    const session = ctx.sessions.prepare(SessionId('session-watch-detach'))
+    const detach = ctx.sessions.enter(session)
+    const watch = session.watch()
+    detach()
+    await expect(watch.end).resolves.toEqual({ reason: 'closed' })
+    await expect(session.closed).resolves.toEqual({ reason: 'closed' })
+  })
+
+  it('folds durable task checkpoints and document replacements from the Session log', () => {
+    const session = Session.create(SessionId('task-graph'))
+    session.append('task/start', { taskId: 'task-1', kind: 'codemode', replayPolicy: 'safe', input: { code: 'x' } })
+    session.append('task/checkpoint', { taskId: 'task-1', state: { issued: 1 } })
+    session.append('document/create', {
+      documentId: 'task-1:journal', kind: 'codemode.journal', version: 1, scope: 'task', ownerTaskId: 'task-1', state: { entries: [] },
+    })
+    session.append('document/update', { documentId: 'task-1:journal', version: 2, state: { entries: [{ id: 1 }] } })
+    session.append('task/end', { taskId: 'task-1', status: 'completed', durationMs: 4 })
+    const graph = session.taskGraph()
+    expect(graph.invalid).toEqual([])
+    expect(graph.tasks.get('task-1')).toMatchObject({ kind: 'codemode', replayPolicy: 'safe', end: { status: 'completed', durationMs: 4 } })
+    expect(graph.tasks.get('task-1')?.checkpoints).toEqual([{ seq: 1, state: { issued: 1 } }])
+    expect(graph.documents.get('task-1:journal')).toMatchObject({ version: 2, state: { entries: [{ id: 1 }] } })
+    const restored = Session.create(session.id, session.snapshotEvents(), session.header)
+    expect([...restored.taskGraph().tasks]).toEqual([...graph.tasks])
+    expect([...restored.taskGraph().documents]).toEqual([...graph.documents])
+    restored.append('document/delete', { documentId: 'task-1:journal' })
+    expect(restored.taskGraph().documents.get('task-1:journal')?.deleted).toBe(true)
+    expect(session.taskGraph().documents.get('task-1:journal')?.deleted).toBe(false)
+  })
 })

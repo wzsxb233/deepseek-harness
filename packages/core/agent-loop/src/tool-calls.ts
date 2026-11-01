@@ -12,15 +12,17 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import { createToolResultMessage, type ToolCallBlock } from '@deepseek-ai/dsh-llm'
-import type { Session, SessionSeq, UserMessage } from '@deepseek-ai/dsh-session'
+import type { Session, UserMessage } from '@deepseek-ai/dsh-session'
 import { TOOL_ABORTED_BEFORE_DISPATCH, TOOL_RUNTIME_SCHEDULER, type ToolExecutionInput, type ToolExecutionMode, type ToolExecutionResult, type ToolRunContext } from '@deepseek-ai/dsh-tools'
 import { assertNever } from '@deepseek-ai/dsh-util-values'
+import { DurableToolTask } from './durable-task.ts'
+import type { ToolCallBlock } from '@deepseek-ai/dsh-llm'
 
 /** One tool call after argument parsing, ready to schedule. */
 interface PlannedCall {
   block: ToolCallBlock
   exec: ToolExecutionInput
+  task?: DurableToolTask
 }
 
 /** Settled dispatch awaiting model-order finalization. */
@@ -131,8 +133,6 @@ async function runGroup(
   const { session } = ctx.agents.requireInitiator()
   const maxParallelToolCalls = ctx.agentLoop.config.maxParallelToolCalls.get()
   const slots: (Slot | undefined)[] = group.map(() => undefined)
-  // Started slots retain their `tool/call` seq so the result can cite it.
-  const callSeqs: Array<SessionSeq | undefined> = group.map(() => undefined)
   let nextToStart = 0
   let committed = 0
   let started = 0
@@ -153,7 +153,7 @@ async function runGroup(
         ? await ctx.tools[TOOL_RUNTIME_SCHEDULER].finalize(slot.exec, slot.result)
         : ctx.tools[TOOL_RUNTIME_SCHEDULER].finish(slot.exec, slot.result)
       // oxlint-disable-next-line typescript/no-non-null-assertion -- bounded index
-      appendToolResult(session, turn, step, call!.block, result, callSeqs[committed]!)
+      call!.task!.settle(result)
       for (const context of result.additionalContexts ?? []) acceptContext(context)
       concluded ||= result.concludesTurn === true
       committed++
@@ -165,12 +165,14 @@ async function runGroup(
   const startCall = async (index: number): Promise<void> => {
     // oxlint-disable-next-line typescript/no-non-null-assertion -- bounded index
     const call = group[index]!
-    callSeqs[index] = appendToolCall(session, turn, step, call.block)
+    call.task = new DurableToolTask(session, turn, step, call.block, ctx.tools.replayPolicy(call.block.name))
+    call.task.recordIntent()
     started++
     const prepared = await ctx.tools[TOOL_RUNTIME_SCHEDULER].prepare(call.exec)
     throwSchedulerFailure()
     switch (prepared.kind) {
       case 'dispatch': {
+        call.task.markBodyStarted()
         const promise = ctx.tools[TOOL_RUNTIME_SCHEDULER].dispatch(prepared.exec).then(
           (outcome) => {
             slots[index] = { exec: prepared.exec, result: outcome.result, needsPost: outcome.kind === 'post-result' }
@@ -248,43 +250,14 @@ async function runGroup(
 
 /** Append the durable call/result pair for a model call skipped after cancellation. */
 function appendSkippedToolCall(session: Session, turn: number, step: number, block: ToolCallBlock): void {
-  const callSeq = appendToolCall(session, turn, step, block)
-  appendToolResult(session, turn, step, block, {
+  const task = new DurableToolTask(session, turn, step, block)
+  task.recordIntent()
+  task.settle({
     content: [{ type: 'text', text: 'Error: tool call aborted before dispatch' }],
     isError: true,
     error: {
       message: 'tool call aborted before dispatch',
       info: { name: 'AbortError', code: TOOL_ABORTED_BEFORE_DISPATCH },
     },
-  }, callSeq)
-}
-
-/** Append a started call and return the event seq that its result must cite. */
-function appendToolCall(session: Session, turn: number, step: number, block: ToolCallBlock): SessionSeq {
-  const event = session.append('tool/call', { turn, step, callId: block.id, name: block.name, arguments: block.arguments })
-  return event.seq
-}
-
-/** Append a model-ordered result linked to its call event. */
-function appendToolResult(
-  session: Session,
-  turn: number,
-  step: number,
-  block: ToolCallBlock,
-  result: ToolExecutionResult,
-  callSeq: SessionSeq,
-): void {
-  const message = createToolResultMessage({
-    callId: block.id,
-    content: result.content,
-    isError: result.isError,
   })
-  session.append('tool/result', {
-    turn, step,
-    message,
-    ...result.error?.info ? { error: result.error.info } : {},
-    // The tool's private presentation payload (e.g. a result-time diff),
-    // persisted so a UI bridge reproduces the card on replay.
-    ...result.meta !== undefined ? { meta: result.meta } : {},
-  }, { surfaceOp: 'append', sourceEventSeqs: [callSeq] })
 }

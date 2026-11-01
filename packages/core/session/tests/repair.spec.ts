@@ -51,6 +51,30 @@ function liveToolRequests(): LogicalSessionEvent<'assistant/message'> {
 }
 
 describe('ToolCallRecovery', () => {
+  it('keeps the interrupted step and turn open while a replay-safe call is deferred', () => {
+    const events: LogicalSessionEvent[] = [
+      { type: 'turn/start', seq: SessionSeq(19), time: 100, data: { turn: 3 } },
+      { type: 'step/start', seq: SessionSeq(20), time: 100, data: { turn: 3, step: 2 } },
+      liveToolRequests(),
+      { type: 'tool/call', seq: SessionSeq(22), time: 120,
+        data: { turn: 3, step: 2, callId: ToolCallId('started'), name: 'bash', arguments: '{}' } },
+    ]
+    const closers = repairInterruptedTurn(events, { replaySafe: name => name === 'bash' })
+    expect(closers.map(event => event.type)).toEqual(['tool/result'])
+    expect(closers[0]).toMatchObject({ data: { message: { toolCallId: 'pending' }, error: { code: TOOL_NOT_STARTED } } })
+  })
+  it('uses the supplied replay policy to tell the model when a started call is safe to retry', () => {
+    const recovery = new ToolCallRecovery(undefined, name => name === 'bash' ? 'safe' : 'unsafe')
+    recovery.observe(liveToolRequests())
+    recovery.observe({
+      type: 'tool/call', seq: SessionSeq(22), time: 120,
+      data: { turn: 3, step: 2, callId: ToolCallId('started'), name: 'bash', arguments: '{}' },
+    })
+    const result = recovery.results()[0]
+    expect(result?.data.message.content[0]?.type === 'text' ? result.data.message.content[0].text : '').toContain('this tool is declared replay-safe')
+    expect(result?.data.error?.code).toBe(TOOL_OUTCOME_UNKNOWN)
+  })
+
   it('observes a live step without earlier history and retains repairs until their commits arrive', () => {
     const recovery = new ToolCallRecovery()
     expect(recovery.results()).toEqual([])

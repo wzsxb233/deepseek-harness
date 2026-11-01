@@ -1,6 +1,6 @@
 /**
  * The one-shot app's command-line provider: it parses the task positional,
- * `--session-id`, `--json`, and `--help`, then publishes
+ * `--session-id`, `--json`, `--diagnostics`, and `--help`, then publishes
  * {@link HEADLESS_STARTUP_SERVICE}. The runner is an ordinary consumer whose
  * lazy config waits for that service.
  * @module @deepseek-ai/dsh-headless/startup
@@ -29,6 +29,8 @@ export interface HeadlessStartupValues {
   sessionId: string | undefined
   /** Whether stdout carries the machine-readable event stream instead of final text. */
   json: boolean
+  /** Whether JSON mode appends the durable graph/inbox/capability state event. */
+  diagnostics: boolean
 }
 
 /**
@@ -41,6 +43,7 @@ function headlessCommand(): Command {
     .description('Answer one task and exit; the answer goes to stdout and diagnostics to stderr.')
     .helpOption('-h, --help', 'show this help')
     .option('--json', 'write newline-delimited run events to stdout instead of the final message')
+    .option('--diagnostics', 'with --json, append durable graph, inbox, and capability state')
     .option('--session-id <id>', 'adopt the persisted Session with this id; an unknown id is an error')
     .argument('[task...]', 'the task text; multiple words are joined by spaces, and `-` reads stdin')
     .addHelpText('after', `
@@ -48,6 +51,7 @@ Examples:
   dsh --profile headless "run the tests"          answer one task and exit
   echo "run the tests" | dsh --profile headless   read the task from stdin
   dsh --profile headless --json "run the tests"   emit machine-readable run events
+  dsh --profile headless --json --diagnostics "run the tests"   include durable bot state
   dsh --profile headless --session-id session-… "continue"   resume an existing Session
 `)
 }
@@ -104,7 +108,7 @@ export function apply(ctx: Context): void {
     if (task === undefined && internals.stdinIsTty()) {
       program.error('error: a task is required, for example: dsh --profile headless "run the tests"')
     }
-    const options = program.opts<{ json?: boolean; sessionId?: string }>()
+    const options = program.opts<{ json?: boolean; diagnostics?: boolean; sessionId?: string }>()
     // A SessionId is opaque, so whitespace is part of the identity: validate
     // emptiness on the trimmed value but hand the runner the exact string.
     const sessionId = options.sessionId
@@ -115,6 +119,7 @@ export function apply(ctx: Context): void {
       task,
       sessionId,
       json: options.json === true,
+      diagnostics: options.diagnostics === true,
     } satisfies HeadlessStartupValues)
   })
   parseCmdline(ctx, program)

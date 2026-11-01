@@ -735,6 +735,7 @@ const SDK_INSTRUCTIONS = `## Writing code for run_code
 \`run_code\` takes two required arguments: \`code\`, the program to execute, and \`description\`, a short summary of what the program does. At run time exactly two of the names declared below are bound: \`tools\` and \`ToolCallError\`. Everything else is a STATIC STUB describing argument and return types — in particular the \`TypedDict\` classes do NOT exist at run time, so build arguments as plain \`dict\`/\`list\` JSON values: \`await tools.name({"field": 1})\`, never \`FooArgs(field=1)\`, which raises \`NameError\`. Inside the program:
 
 - Call tools as \`await tools.name(args)\` — subscript access for exotic, reserved, or underscore-leading names: \`await tools["my-tool"](args)\`. Every call resolves to the tool's typed canonical JSON value (each method's return type below). Tool arguments must be lossless JSON.
+- Discover a deferred tool with \`await tools.searchTools({"query": "what you need", "limit": 5})\`; it returns detached schemas and never executes a tool.
 - A FAILED tool call raises \`ToolCallError\`, whose \`toolName\` identifies the failed tool and whose message is human-readable — wrap in \`try/except\` to handle and continue.
 - Independent read-only calls MAY overlap under \`asyncio.gather\` (safe calls run concurrently; mutating calls run alone, in submission order). Sequence dependent work with \`await\`.
 - Only values emitted as program output enter the conversation. A successful tool result containing an image is attached after the run so you can inspect it on the next step; every other intermediate result stays out of the conversation, so extract just what you need.
@@ -757,9 +758,10 @@ The available tools:`
  * never carries a duplicate.
  * @param schemas - the tool schemas plus canonical output schemas to declare
  *   (the caller excludes `run_code` itself).
+ * @param includeSearchTools - include the runtime `tools.searchTools` helper.
  * @returns the complete section text.
  */
-export function renderToolsSdkPy(schemas: ToolSdkSchema[]): string {
+export function renderToolsSdkPy(schemas: ToolSdkSchema[], includeSearchTools = false): string {
   const sorted = [...schemas].sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0)
   const state: RenderState = { classes: [], usedClassNames: new Set(), nextClassCounter: new Map(), typing: new Set(['Protocol']) }
   // ONE ordered member stream, matching the documented lexicographic contract
@@ -809,9 +811,11 @@ export function renderToolsSdkPy(schemas: ToolSdkSchema[]): string {
   // emitted — including the subscript-only tool set.
   const bodyLines = statements > 0 ? members : [`${pad(1)}pass`, ...members]
   const body = bodyLines.join('\n')
+  if (includeSearchTools) state.typing.add('Any')
   const imports = TYPING_ORDER.filter(symbol => state.typing.has(symbol))
   const classBlock = state.classes.length > 0 ? `${state.classes.join('\n\n')}\n\n` : ''
   const errorDeclaration = 'class ToolCallError(Exception):\n    toolName: str'
-  const declaration = `from typing import ${imports.join(', ')}\n\n${errorDeclaration}\n\n${classBlock}class Tools(Protocol):\n${body}\n\ntools: Tools`
+  const searchDeclaration = includeSearchTools ? `${pad(1)}async def searchTools(self, args: dict[str, Any]) -> list[dict[str, Any]]: ...\n` : ''
+  const declaration = `from typing import ${imports.join(', ')}\n\n${errorDeclaration}\n\n${classBlock}class Tools(Protocol):\n${searchDeclaration}${body}\n\ntools: Tools`
   return `${SDK_INSTRUCTIONS}\n\n\`\`\`python\n${declaration}\n\`\`\``
 }

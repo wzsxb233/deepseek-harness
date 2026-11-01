@@ -7,6 +7,7 @@
 import type {} from '@deepseek-ai/dsh-working-directory'
 import { Context, Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
+import { brandString } from '@deepseek-ai/dsh-brand'
 import { AnonymousEntries, NamedEntries, ScopedLayers, scopeOf, scopeTarget } from '@deepseek-ai/dsh-scope'
 import type { ScopeKey, ScopeLayer, Scoped } from '@deepseek-ai/dsh-scope'
 import type { ToolCallId, ContentBlock, ToolSchema } from '@deepseek-ai/dsh-llm'
@@ -28,6 +29,7 @@ import type { PtcSdkLanguage } from './ptc.ts'
 import { renderToolsSdk } from './ts-types.ts'
 import type { ToolSdkSchema } from './ts-types.ts'
 import { renderToolsSdkPy } from './py-types.ts'
+import { rankToolSearch } from './search.ts'
 
 declare module '@deepseek-ai/dsh-llm' {
   interface MessageSourceMap {
@@ -59,10 +61,10 @@ declare module '@deepseek-ai/dsh-llm' {
  */
 const PTC_ONLY_INSTRUCTION = `\`${RUN_CODE_NAME}\` is the only tool you can call directly — a tool call naming any other tool fails. Reach every tool the SDK declares below from inside the program.`
 
-const SDK_RENDERERS: Record<string, (schemas: ToolSdkSchema[], programFormat: 'function-body' | 'repl') => string> = {
+const SDK_RENDERERS: Record<string, (schemas: ToolSdkSchema[], programFormat: 'function-body' | 'repl', includeSearchTools: boolean) => string> = {
   typescript: renderToolsSdk,
-  python: renderToolsSdkPy,
-} satisfies Record<PtcSdkLanguage, (schemas: ToolSdkSchema[], programFormat: 'function-body' | 'repl') => string>
+  python: (schemas, _programFormat, includeSearchTools) => renderToolsSdkPy(schemas, includeSearchTools),
+} satisfies Record<PtcSdkLanguage, (schemas: ToolSdkSchema[], programFormat: 'function-body' | 'repl', includeSearchTools: boolean) => string>
 
 export {
   defineTool,
@@ -101,10 +103,12 @@ export {
 } from './json-schema.ts'
 
 export type { PtcDispatchEventData, PtcDispatchStartEventData } from './types.ts'
+export { foldPtcDispatchJournal, ptcStartSeq, type PtcJournalEntry, type PtcJournalFold } from './ptc-journal.ts'
 
 export { CodeRunFailedError, RUN_CODE_NAME } from './ptc.ts'
 export { jsonSchemaToTs, renderToolsSdk } from './ts-types.ts'
 export { jsonSchemaToPy, renderToolsSdkPy } from './py-types.ts'
+export { rankToolSearch, tokenizeToolSearch, type ToolSearchDocument } from './search.ts'
 export { defineContentToolFixture, type ContentToolFixtureOptions } from './testing.ts'
 
 // The render-intent vocabulary a tool declares via `presentCall`/`presentResult`
@@ -220,8 +224,21 @@ export interface ToolOutputDefinition {
   presentationMeta?(args: unknown, value: JsonValue): JsonValue
 }
 
+/** Caller classes a tool may accept: the model directly or another tool. */
+export type ToolCaller = 'model' | 'tools'
+
+/** Recovery policy for a call interrupted after its intent was recorded. */
+export type ToolReplayPolicy = 'safe' | 'unsafe'
+
 /** A registered tool: its schema plus the execution function. */
 export interface ToolDefinition extends ToolSchema {
+  /**
+   * Caller classes allowed to execute this tool. Omission allows both; this
+   * control is runtime-only and never reaches a provider schema.
+   */
+  readonly callers?: readonly ToolCaller[]
+  /** Whether recovery may retry an interrupted call without external verification. */
+  readonly replay?: ToolReplayPolicy
   /** Mandatory canonical output declaration. */
   readonly output: ToolOutputDefinition
   /**
@@ -352,6 +369,16 @@ export interface ToolExecutionInput {
   readonly signal: AbortSignal
 }
 
+/** Options for one tool-to-tool nested execution. */
+export interface NestedToolExecutionOptions {
+  /** Optional cancellation owned by the nested caller in addition to its parent. */
+  readonly signal?: AbortSignal
+  /** Stable caller-provided label for diagnostics and replay-oriented logs. */
+  readonly key?: string
+  /** Whether a host wants live progress for this nested call (reserved for UI adapters). */
+  readonly progress?: boolean
+}
+
 /**
  * Scheduling mode for one pending call. `parallel` may overlap with siblings;
  * `exclusive` runs alone and forms an ordering barrier.
@@ -433,6 +460,25 @@ export interface ToolRunContext extends ToolExecution {
    * conclude the enclosing run.
    */
   concludeTurn(): void
+  /**
+   * Execute another registered tool as a child of this call. The child uses
+   * the same agent scope and is rejected when the selected definition does not
+   * allow `callers: ['tools']`. Unawaited children are aborted and drained
+   * before this call settles.
+   * @param name - registered child tool name.
+   * @param args - lossless JSON arguments for the child.
+   * @param options - optional child signal and stable key.
+   * @returns the child’s canonical execution result.
+   */
+  executeTool?(name: string, args: unknown, options?: NestedToolExecutionOptions): Promise<NestedToolExecutionResult>
+}
+
+/** Result returned to a tool that owns a nested call. */
+export type NestedToolExecutionResult = ToolExecutionResult & {
+  /** Stable nested call/task identity; equal to the persisted child call id. */
+  readonly taskId: ToolCallId
+  /** Monotonic duration of the nested execution, when its body ran. */
+  readonly durationMs?: number
 }
 
 /** Registry-owned live execution object; public pipeline views stay readonly. */
@@ -721,6 +767,41 @@ interface ToolView {
   readonly restrictableNames: ReadonlySet<string>
 }
 
+/** Whether a registered definition admits one execution caller class. */
+function acceptsCaller(definition: ToolDefinition, caller: ToolCaller): boolean {
+  return definition.callers === undefined || definition.callers.includes(caller)
+}
+
+/** Runtime predicate retained for raw interop definitions crossing the registry boundary. */
+function isToolCaller(value: unknown): value is ToolCaller {
+  return value === 'model' || value === 'tools'
+}
+
+/** Validate recovery policy metadata before a definition enters a live registry. */
+function isToolReplayPolicy(value: unknown): value is ToolReplayPolicy {
+  return value === 'safe' || value === 'unsafe'
+}
+
+/** Validate recovery policy metadata before a definition enters a live registry. */
+function validateReplayPolicy(name: string, replay: unknown): void {
+  if (replay === undefined || isToolReplayPolicy(replay)) return
+  throw new TypeError(`tool "${name}" replay must be "safe" or "unsafe"`)
+}
+
+/** Validate caller restrictions before a definition enters a live registry. */
+function validateCallers(name: string, callers: readonly ToolCaller[] | undefined): void {
+  if (callers === undefined) return
+  if (callers.length === 0) throw new TypeError(`tool "${name}" callers must not be empty`)
+  const seen = new Set<ToolCaller>()
+  for (const caller of callers) {
+    if (!isToolCaller(caller)) {
+      throw new TypeError(`tool "${name}" callers contains unsupported caller "${String(caller)}"`)
+    }
+    if (seen.has(caller)) throw new TypeError(`tool "${name}" callers lists "${caller}" more than once`)
+    seen.add(caller)
+  }
+}
+
 /**
  * A monotonic execution guard evaluated after every `tools/pre-execute`
  * listener and before the tool body. Returning a reason denies the call;
@@ -825,6 +906,11 @@ export class ToolRuntime extends Service {
   private deferredContexts = new WeakMap<ToolRunContext, UserMessage[]>()
   /** Executions whose tool body declared the current turn complete. */
   private concludingExecutions = new WeakSet<ToolExecution>()
+  /** Child calls retained until the parent tool reaches a terminal result. */
+  private ownedNested = new WeakMap<
+    ToolRunContext,
+    Map<string, { controller: AbortController; promise: Promise<NestedToolExecutionResult> }>
+  >()
   /** Original caller cancellation, kept outside the wrapper-mutable execution object. */
   private cancellationStates = new WeakMap<ToolRunContext, ToolCancellationState>()
   /** Definition-owned final content transform snapshotted before policy begins. */
@@ -911,7 +997,7 @@ export class ToolRuntime extends Service {
         const render = SDK_RENDERERS[runtime.language]
         /* v8 ignore next -- requirePtcRuntime rejects an unknown language before this runs. */
         if (render === undefined) throw new Error(`dsh-tools: no SDK renderer for ${runtime.language}`)
-        return render(this.sdkSchemas(context.scope), runtime.programFormat)
+        return render(this.sdkSchemas(context.scope), runtime.programFormat, true)
       },
     }
   }
@@ -1020,7 +1106,9 @@ export class ToolRuntime extends Service {
     const view = this.view(scope)
     const mode = this.modeFor(scope)
     if (mode === 'native') {
-      const schemas = [...view.visible.values()].map(definition => this.schemaOf(definition, false))
+      const schemas = [...view.visible.values()]
+        .filter(definition => acceptsCaller(definition, 'model'))
+        .map(definition => this.schemaOf(definition, false))
       return { schemas, knownNames: [...view.knownNames] }
     }
     // Validate the runtime language BEFORE projecting schemas: schemaOf reads
@@ -1029,7 +1117,9 @@ export class ToolRuntime extends Service {
     // renderer-table rejection the canonical assembly-time error for a
     // language with no SDK renderer.
     this.requirePtcRuntime(mode)
-    const schemas = [...view.visible.values()].map(definition => this.schemaOf(definition, false))
+    const schemas = [...view.visible.values()]
+      .filter(definition => acceptsCaller(definition, 'model'))
+      .map(definition => this.schemaOf(definition, false))
     return {
       schemas: schemas.filter(schema => schema.name === RUN_CODE_NAME),
       knownNames: [RUN_CODE_NAME],
@@ -1077,6 +1167,8 @@ export class ToolRuntime extends Service {
       throw new TypeError(`tool "${name}" must declare output { schema, render, presentationMeta? }`)
     }
     assertSupportedJsonSchema(output.schema)
+    validateCallers(name, definition.callers)
+    validateReplayPolicy(name, definition.replay)
     const timeoutMs = definition.timeoutMs
     if (timeoutMs !== undefined
       && (!Number.isFinite(timeoutMs) || timeoutMs <= 0)) {
@@ -1201,8 +1293,8 @@ export class ToolRuntime extends Service {
     const knownNames = new Set<string>()
     const restrictableNames = new Set<string>()
     for (const [name, definition] of inherited) {
-      knownNames.add(name)
       restrictableNames.add(name)
+      if (acceptsCaller(definition, 'model')) knownNames.add(name)
       // Restrictions intersect across the whole chain: any scope on it may
       // mask an inherited name for everything nested inside it.
       if (layers.every(layer => layer.admits(name))) visible.set(name, definition)
@@ -1211,7 +1303,7 @@ export class ToolRuntime extends Service {
     // outside the filter above.
     if (own !== undefined) {
       for (const [name, definition] of own.tools.entries()) {
-        knownNames.add(name)
+        if (acceptsCaller(definition, 'model')) knownNames.add(name)
         visible.set(name, definition)
       }
     }
@@ -1240,6 +1332,46 @@ export class ToolRuntime extends Service {
   }
 
   /**
+   * Resolve the recovery policy for a registered tool, defaulting conservatively.
+   * @param name - registered tool name.
+   * @param scope - optional agent scope selecting a scoped definition.
+   * @returns the tool's replay policy.
+   */
+  replayPolicy(name: string, scope?: ScopeKey): ToolReplayPolicy {
+    return this.get(name, scope)?.replay ?? 'unsafe'
+  }
+
+  /**
+   * Search the caller's currently visible tool catalog with deterministic BM25.
+   * Deferred tools are included alongside immediate tools so a host can expose
+   * one search surface for native, PTC, and codemode adapters; callers decide
+   * how to activate or render the returned schemas. Ties preserve registry
+   * order, making the result stable across restore and replay.
+   * @param query - natural-language search terms.
+   * @param scope - optional agent scope whose shadowing and restrictions apply.
+   * @param limit - maximum number of schemas, capped to a positive finite integer.
+   * @param caller - caller class whose definitions may be discovered.
+   * @returns detached schemas ranked best first.
+   */
+  searchTools(query: string, scope?: ScopeKey, limit: number = 8, caller: ToolCaller = 'model'): ToolSchema[] {
+    if (!Number.isFinite(limit) || limit <= 0) return []
+    const bounded = Math.floor(limit)
+    const view = this.view(scope)
+    const definitions = [...view.visible.values()]
+      .filter(definition => definition.name !== RUN_CODE_NAME)
+      .filter(definition => acceptsCaller(definition, caller))
+    const names = rankToolSearch(query, definitions.map(definition => ({
+      name: definition.name,
+      text: `${definition.name} ${definition.description}`,
+    })), bounded)
+    const byName = new Map(definitions.map(definition => [definition.name, definition]))
+    return names.flatMap((name) => {
+      const definition = byName.get(name)
+      return definition === undefined ? [] : [this.schemaOf(definition, true)]
+    })
+  }
+
+  /**
    * Resolve the definition that MAY EXECUTE for a call, applying the mode
    * collapse at the operation boundary that owns it. The registry view
    * (`get`) is presentation-agnostic; here a MODEL-DIRECT call under `ptc`
@@ -1255,6 +1387,7 @@ export class ToolRuntime extends Service {
   private resolveExecution(name: string, scope: ScopeKey | undefined, nested: boolean): ToolDefinition | undefined {
     const tool = this.get(name, scope)
     if (tool === undefined) return undefined
+    if (!acceptsCaller(tool, nested ? 'tools' : 'model')) return undefined
     if (this.collapses(name, scope, nested)) return undefined
     return tool
   }
@@ -1266,12 +1399,27 @@ export class ToolRuntime extends Service {
    * @returns one deep-cloned schema per visible tool.
    */
   schemas(scope?: ScopeKey): ToolSchema[] {
-    return [...this.view(scope).visible.values()].map(definition => this.schemaOf(definition, true))
+    return this.schemasForCaller('model', scope)
+  }
+
+  /**
+   * Project visible definitions for one caller class without exposing runtime
+   * execution callbacks. PTC and nested tool adapters use this same projection
+   * so the generated SDK cannot announce a tool that caller restrictions deny.
+   * @param caller - `model` for direct schemas, `tools` for nested/codemode schemas.
+   * @param scope - optional agent scope.
+   * @returns detached schemas accepted by that caller class.
+   */
+  schemasForCaller(caller: ToolCaller, scope?: ScopeKey): ToolSchema[] {
+    return [...this.view(scope).visible.values()]
+      .filter(definition => acceptsCaller(definition, caller))
+      .map(definition => this.schemaOf(definition, true))
   }
 
   /** Project visible callable tools onto the generated PTC mode SDK contract. */
   private sdkSchemas(scope?: ScopeKey): ToolSdkSchema[] {
     return [...this.view(scope).visible.values()]
+      .filter(definition => acceptsCaller(definition, 'tools'))
       .filter(definition => definition.name !== RUN_CODE_NAME)
       .map((definition): ToolSdkSchema => {
         const output = snapshotJsonValue(definition.output.schema)
@@ -1405,6 +1553,8 @@ export class ToolRuntime extends Service {
     const agent = exec.agent
     const parent = exec.parent
     const signal = exec.signal
+    let nestedSequence = 0
+    let execution!: MutableToolRunContext
     // Distinguish a mode-collapsed call (visible in the scope, denied only by
     // the `ptc` collapse) from a genuinely unknown tool. A collapsed call is
     // deterministically denied, so it terminates BEFORE the extensible policy
@@ -1430,6 +1580,48 @@ export class ToolRuntime extends Service {
       concludeTurn(): void {
         concludingExecutions.add(this as unknown as ToolExecution)
       },
+      executeTool: (
+        nestedName: string,
+        nestedArguments: unknown,
+        options: NestedToolExecutionOptions = {},
+      ): Promise<NestedToolExecutionResult> => {
+        const controller = new AbortController()
+        const nestedSignal = options.signal === undefined
+          ? AbortSignal.any([signal, controller.signal])
+          : AbortSignal.any([signal, options.signal, controller.signal])
+        const suffix = options.key === undefined
+          ? String(++nestedSequence)
+          : `${options.key}:${++nestedSequence}`
+        const childKey = `${String(callId)}:nested:${suffix}`
+        const startedAt = performance.now()
+        const childExecution = this.execute({
+          callId: brandString<ToolCallId>(childKey),
+          rootCallId,
+          name: nestedName,
+          arguments: nestedArguments,
+          ...agent === undefined ? {} : { agent },
+          parent: token,
+          signal: nestedSignal,
+        })
+        const promise = childExecution.then((result) => {
+          const enriched = { ...result } as NestedToolExecutionResult
+          Object.defineProperty(enriched, 'taskId', { value: brandString<ToolCallId>(childKey), enumerable: false })
+          if (!result.isError) {
+            Object.defineProperty(enriched, 'durationMs', {
+              value: Math.max(0, performance.now() - startedAt), enumerable: false,
+            })
+          }
+          return Object.freeze(enriched)
+        })
+        let children = this.ownedNested.get(execution)
+        if (children === undefined) {
+          children = new Map<string, { controller: AbortController; promise: Promise<NestedToolExecutionResult> }>()
+          this.ownedNested.set(execution, children)
+        }
+        const ownedChildren = children
+        ownedChildren.set(childKey, { controller, promise })
+        return promise.finally(() => { ownedChildren.delete(childKey) })
+      },
     }
     // Capture the finalizer BEFORE argument materialization: the
     // `finalizeContent` contract snapshots the callback when the call starts,
@@ -1450,7 +1642,7 @@ export class ToolRuntime extends Service {
       if (detached === undefined) {
         throw new TypeError('tool execution arguments must be losslessly JSON-serializable')
       }
-      const execution: MutableToolRunContext = { ...base, arguments: deepFreeze(detached) }
+      execution = { ...base, arguments: deepFreeze(detached) }
       this.deferredContexts.set(execution, deferredContexts)
       this.contentFinalizers.set(execution, finalizerFor())
       if (!collapsed) this.contentProjectors.set(execution, capturedProjector)
@@ -1594,9 +1786,20 @@ export class ToolRuntime extends Service {
     } catch (error: unknown) {
       return toolErrorResult(error)
     } finally {
+      await this.settleOwnedNested(exec)
       fused.dispose()
       exec.signal = wrapperSignal
     }
+  }
+
+  /** Abort children left running by a parent tool and wait for their outcomes. */
+  private async settleOwnedNested(exec: ToolRunContext): Promise<void> {
+    const children = this.ownedNested.get(exec)
+    if (children === undefined || children.size === 0) return
+    const active = [...children.values()]
+    for (const child of active) child.controller.abort(new Error(`parent tool "${exec.name}" settled`))
+    await Promise.allSettled(active.map(child => child.promise))
+    children.clear()
   }
 
   /**

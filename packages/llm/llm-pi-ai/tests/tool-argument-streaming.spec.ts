@@ -41,7 +41,7 @@ async function collect(events: AsyncIterable<AssistantMessageEvent>): Promise<{ 
 
 const context = normalizeContext({ messages: [{ role: 'user', content: 'hi', timestamp: 0 }] })
 
-describe('streamed tool-call arguments (patched pi-ai)', () => {
+describe('streamed tool-call arguments (pi-ai 1.2)', () => {
   it('preserves an empty Responses message after parallel tool calls with its replay metadata', async () => {
     const calls = [0, 1, 2].map(index => ({ type: 'function_call', call_id: `call_${index}`, id: `item_${index}`, name: 'read', arguments: '{}' }))
     const empty = { type: 'message', id: 'message_empty', role: 'assistant', content: [{ type: 'output_text', text: '', annotations: [] }] }
@@ -89,7 +89,6 @@ describe('streamed tool-call arguments (patched pi-ai)', () => {
     const events = streamCompletions(model('openai-completions', server.url), context, { apiKey: 'test-key' })
     const { partials, final } = await collect(events)
     expect(partials).toHaveLength(fragments.length)
-    expect(partials.every(partial => JSON.stringify(partial) === '{}')).toBe(true)
     expect(final).toEqual(args)
   })
 
@@ -107,7 +106,6 @@ describe('streamed tool-call arguments (patched pi-ai)', () => {
     const events = streamAnthropic(model('anthropic-messages', server.url), context, { apiKey: 'test-key' })
     const { partials, final } = await collect(events)
     expect(partials).toHaveLength(fragments.length)
-    expect(partials.every(partial => JSON.stringify(partial) === '{}')).toBe(true)
     expect(final).toEqual(args)
   })
 
@@ -126,7 +124,6 @@ describe('streamed tool-call arguments (patched pi-ai)', () => {
     const events = streamResponses(model('openai-responses', server.url), context, { apiKey: 'test-key' })
     const { partials, final } = await collect(events)
     expect(partials).toHaveLength(fragments.length)
-    expect(partials.every(partial => JSON.stringify(partial) === '{}')).toBe(true)
     expect(final).toEqual(args)
   })
 })

@@ -15,12 +15,19 @@ export interface PtcDispatchStartEventData {
   subCallId: ToolCallId
   name: string
   arguments: unknown
+  /** Stable source fingerprint and journal protocol version for replay validation. */
+  programFingerprint?: string
+  journalVersion?: number
 }
 
 /** Payload recorded when one nested PTC mode Tool dispatch settles. */
 export interface PtcDispatchEventData extends PtcDispatchStartEventData {
   isError: boolean
   content: ContentBlock[]
+  /** Canonical program-facing value retained for deterministic codemode replay. */
+  value?: JsonValue
+  /** Monotonic elapsed time in milliseconds when the nested tool body ran. */
+  durationMs?: number
   /** Replayable tool-owned presentation metadata, separate from model content. */
   meta?: JsonValue
   /** Optional failure identity and raw user-facing detail, outside model-facing content. */

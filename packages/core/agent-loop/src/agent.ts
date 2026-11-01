@@ -60,6 +60,7 @@ type PreparedStep =
     assembly: PromptAssembly
   }
 
+
 /** Remove adapter-derived values before plugins propose the next request config. */
 function requestProposal(header: EpochHeader): LlmCallConfig {
   if (header.adapterDefaults === undefined) return header.config
@@ -330,7 +331,7 @@ export class ReactLoopAgent implements Agent {
         signal.throwIfAborted()
         this.session.append('step/start', { turn, step })
         phase.step = step
-        const toolRecovery = new ToolCallRecovery()
+        const toolRecovery = new ToolCallRecovery(undefined, name => this.loopCtx.tools.replayPolicy(name, this))
         const stopRecovery = this.ctx.on('session/event', (session, event) => {
           if (session === this.session) toolRecovery.observe(event)
         })

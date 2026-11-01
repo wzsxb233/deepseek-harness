@@ -1,0 +1,28 @@
+# Bilingual-pair consistency record for 2026-10-15-durable-graph-replay.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/persistence-changes/2026-10-15-durable-graph-replay.md
+/:
+  en: 3d5a424ae7d7e46b
+  zh: c22a8e4a62d8cc1a
+/2026-10-15-durable-graph-replay:
+  en: 34b82bbf278b2945
+  zh: bb9767d712f870c7
+/2026-10-15-durable-graph-replay/summary:
+  en: 9add404eb7c790f4
+  zh: 36b3aabad2650595
+/2026-10-15-durable-graph-replay/table-of-contents:
+  en: 6cf314a069ceb451
+  zh: 9adff678e9ecab3b
+/2026-10-15-durable-graph-replay/declaration:
+  en: 6907136f28e48c90
+  zh: 02f8298485f3d8e7
+/2026-10-15-durable-graph-replay/compatibility:
+  en: 035410293fa22cfa
+  zh: b0daf76eafa665b8
+/2026-10-15-durable-graph-replay/verification:
+  en: 3b27a6a2ddd8305a
+  zh: 697a4f95b22ebd88
+/2026-10-15-durable-graph-replay/dev-note:
+  en: b75c8458928b72b9
+  zh: 003ba4e17b4b5269

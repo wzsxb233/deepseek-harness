@@ -47,6 +47,7 @@ interface BenchOptions {
   readStdin?: () => Promise<string>
   sessionId?: string
   json?: boolean
+  diagnostics?: boolean
   observe?: () => Promise<ObservationStub>
   /** Leave the query service unmounted to exercise the fail-loud path. */
   omitSessionQuery?: boolean
@@ -225,6 +226,7 @@ async function bench(script: Script, options: BenchOptions = {}): Promise<{
         ...options.useStdin === true ? {} : { task: options.task ?? 'do the thing' },
         ...options.sessionId === undefined ? {} : { sessionId: options.sessionId },
         ...options.json === undefined ? {} : { json: options.json },
+        ...options.diagnostics === undefined ? {} : { diagnostics: options.diagnostics },
       })
       return { code: await exited, out, err, order }
     },
@@ -601,7 +603,7 @@ describe('headless runner', () => {
     await test.ctx.fiber.dispose()
   })
 
-  it('fails when an event below the captured Session length cannot be read', async () => {
+  it('summarizes from the durable Session watch instead of deprecated event reads', async () => {
     let capturedLength = 0
     const test = await bench({
       afterPrompt(session, message) {
@@ -612,11 +614,7 @@ describe('headless runner', () => {
     })
     const result = await test.run()
     expect(capturedLength).toBeGreaterThan(0)
-    expect(result).toMatchObject({
-      code: 1,
-      out: '',
-      err: `dsh: headless summary cannot read seq 0 below captured length ${String(capturedLength)}\n`,
-    })
+    expect(result).toMatchObject({ code: 0, out: 'unreachable\n', err: '' })
     await test.ctx.fiber.dispose()
   })
 
@@ -1084,6 +1082,41 @@ describe('headless runner', () => {
     expect(result.err).toBe('')
     expect(result.code).toBe(0)
     await test.ctx.fiber.dispose()
+  })
+
+  it('projects durable bot state when diagnostics are requested', async () => {
+    const test = await bench({
+      afterPrompt(session, message) {
+        appendTurn(session, 1, message, 'diagnostic answer', true)
+      },
+    }, { json: true, diagnostics: true })
+    try {
+      const result = await test.run()
+      expect(result.code).toBe(0)
+      const events = result.out.trim().split('\n').map(line => JSON.parse(line) as Record<string, unknown>)
+      expect(events.at(-2)).toMatchObject({
+        type: 'state',
+        capabilities: {
+          inbox: true,
+          sessionWatch: true,
+          sessionClosed: true,
+          durableTaskGraph: true,
+          deterministicCodemodeReplay: true,
+          safeToolAutoRerun: true,
+        },
+        inbox: { nextTurn: 1, nextStep: 0 },
+        graph: { invalid: [] },
+      })
+      expect(events.at(-1)).toEqual({ type: 'final', text: 'diagnostic answer' })
+      const state = events.at(-2) as {
+        session: { observedEvents: number; watch: string }
+        graph: { tasks: unknown[]; documents: unknown[] }
+      }
+      expect(state.session.observedEvents).toBeGreaterThan(0)
+      expect(state.session.watch).toBe('drained')
+      expect(state.graph.tasks).toEqual([])
+      expect(state.graph.documents).toEqual([])
+    } finally { await test.ctx.fiber.dispose() }
   })
 
   it('reports a direct failure as an error event in --json mode', async () => {

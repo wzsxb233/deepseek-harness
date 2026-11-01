@@ -1,4 +1,4 @@
-import { ToolCallId, createMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
+import { ToolCallId, createMessage, createSystemMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
 import { afterEach, describe, expect, it, vi, type MockInstance } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { appendFile, mkdtemp, readdir, rm } from 'node:fs/promises'
@@ -9,7 +9,7 @@ import type { ContextFormed } from '@deepseek-ai/dsh-llm'
 import SessionStore, { SessionLogOffset, SessionSeq, Session, SessionId, TOOL_NOT_STARTED, TOOL_OUTCOME_UNKNOWN } from '@deepseek-ai/dsh-session'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
-import ToolRuntime, { defineContentToolFixture, TOOL_RUNTIME_SCHEDULER } from '@deepseek-ai/dsh-tools'
+import ToolRuntime, { defineContentToolFixture, defineTool, TOOL_RUNTIME_SCHEDULER } from '@deepseek-ai/dsh-tools'
 import AgentRegistry, { type Agent } from '@deepseek-ai/dsh-agent'
 import type { SessionHandle } from '@deepseek-ai/dsh-session-persistence'
 
@@ -537,6 +537,49 @@ describe('the session-persistence Agent Note: AgentLoop factory create/resume', 
       data: { error: { code: TOOL_OUTCOME_UNKNOWN } },
     })
     expect(stored[6]).toMatchObject({ data: { reason: { kind: 'interrupted' } } })
+    await ctx2.fiber.dispose()
+  })
+
+  it.each(['safe', 'unsafe'] as const)('recovers with the current scoped %s replay policy and persists one result before closing', async (replay) => {
+    const sessionId = SessionId(`safe-recovery-${replay}`)
+    const { ctx, root } = await persistentHarness(new MockAdapter([textResponse('Recovered')]))
+    const seed = Session.create(sessionId)
+    seed.append('turn/start', { turn: 1 })
+    seed.append('step/start', { turn: 1, step: 1 })
+    seed.append('system/message', { turn: 1, step: 1, message: createSystemMessage('') }, { surfaceOp: 'append' })
+    seed.append('assistant/message', {
+      turn: 1, step: 1, stream: [],
+      message: createMessage({ role: 'assistant', source: { kind: 'model', provider: 'mock', model: 'mock' }, content: [
+        { type: 'tool-call', id: ToolCallId('recover-read'), name: 'read', arguments: '{}' },
+      ] }),
+    }, { surfaceOp: 'append' })
+    seed.append('tool/call', { turn: 1, step: 1, callId: ToolCallId('recover-read'), name: 'read', arguments: '{}' })
+    await seedStoredSession(ctx, sessionId, seed.snapshotEvents())
+    const body = vi.fn(async () => 'read result')
+    const globalBody = vi.fn(async () => 'wrong global result')
+    ctx.tools.register(defineTool({ name: 'read', description: 'Global read', parameters: {}, replay: 'safe',
+      output: { schema: { type: 'string' }, render: (_args, value) => [{ type: 'text', text: value }] }, execute: globalBody }))
+    const handle = await ctx.agents.resume({ resumeSessionId: sessionId,
+      agentOptions: { provider: 'mock', model: 'mock' },
+      setup: (agentCtx) => {
+        agentCtx.tools.register(defineTool({ name: 'read', description: 'Scoped read', parameters: {}, replay,
+          output: { schema: { type: 'string' }, render: (_args, value) => [{ type: 'text', text: value }] }, execute: body }))
+      },
+    })
+    await handle.agent.whenIdle()
+    await handle.dispose()
+    const events = await readStoredEvents(ctx, sessionId)
+    const receipts = events.filter(event => event.type === 'tool/result' && event.data.message.source.callId === ToolCallId('recover-read'))
+    expect(body).toHaveBeenCalledTimes(replay === 'safe' ? 1 : 0)
+    expect(globalBody).not.toHaveBeenCalled()
+    expect(receipts).toHaveLength(1)
+    expect(receipts[0]!.seq).toBeLessThan(events.find(event => event.type === 'step/end')!.seq)
+    expect(receipts[0]).toMatchObject({ data: replay === 'safe' ? { message: { isError: false } } : { error: { code: TOOL_OUTCOME_UNKNOWN } } })
+    await ctx.fiber.dispose()
+    const ctx2 = await mountPersistentHarness(root, new MockAdapter([]))
+    const resumed = await ctx2.agents.resume({ resumeSessionId: sessionId })
+    await resumed.dispose()
+    expect((await readStoredEvents(ctx2, sessionId)).filter(event => event.type === 'tool/result' && event.data.message.source.callId === ToolCallId('recover-read'))).toHaveLength(1)
     await ctx2.fiber.dispose()
   })
 

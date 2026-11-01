@@ -9454,6 +9454,337 @@
       }
     },
     {
+      "key": "event:document/create",
+      "kind": "event",
+      "event": "document/create",
+      "surface": false,
+      "digest": "2279430ef63283dfe6effc74f7459e7a81819f0325a6ba91654dda79bf522e96",
+      "schema": {
+        "root": 0,
+        "nodes": [
+          {
+            "kind": "object",
+            "properties": [
+              {
+                "name": "data",
+                "type": 1,
+                "optional": false
+              },
+              {
+                "name": "ignorable",
+                "type": 13,
+                "optional": true
+              },
+              {
+                "name": "seq",
+                "type": 12,
+                "optional": false
+              },
+              {
+                "name": "time",
+                "type": 12,
+                "optional": false
+              },
+              {
+                "name": "type",
+                "type": 14,
+                "optional": false
+              }
+            ],
+            "indices": []
+          },
+          {
+            "kind": "object",
+            "properties": [
+              {
+                "name": "documentId",
+                "type": 2,
+                "optional": false
+              },
+              {
+                "name": "kind",
+                "type": 2,
+                "optional": false
+              },
+              {
+                "name": "ownerTaskId",
+                "type": 2,
+                "optional": true
+              },
+              {
+                "name": "scope",
+                "type": 3,
+                "optional": false
+              },
+              {
+                "name": "state",
+                "type": 7,
+                "optional": false
+              },
+              {
+                "name": "version",
+                "type": 12,
+                "optional": false
+              }
+            ],
+            "indices": []
+          },
+          {
+            "kind": "primitive",
+            "type": "string"
+          },
+          {
+            "kind": "union",
+            "types": [
+              4,
+              5,
+              6
+            ]
+          },
+          {
+            "kind": "literal",
+            "value": "conversation"
+          },
+          {
+            "kind": "literal",
+            "value": "session"
+          },
+          {
+            "kind": "literal",
+            "value": "task"
+          },
+          {
+            "kind": "union",
+            "types": [
+              2,
+              8,
+              9,
+              10,
+              11,
+              12
+            ]
+          },
+          {
+            "kind": "array",
+            "element": 7
+          },
+          {
+            "kind": "object",
+            "properties": [],
+            "indices": [
+              {
+                "key": 2,
+                "value": 7
+              }
+            ]
+          },
+          {
+            "kind": "primitive",
+            "type": "boolean"
+          },
+          {
+            "kind": "primitive",
+            "type": "null"
+          },
+          {
+            "kind": "primitive",
+            "type": "number"
+          },
+          {
+            "kind": "literal",
+            "value": true
+          },
+          {
+            "kind": "literal",
+            "value": "document/create"
+          }
+        ]
+      }
+    },
+    {
+      "key": "event:document/delete",
+      "kind": "event",
+      "event": "document/delete",
+      "surface": false,
+      "digest": "cfb56fc34f0f0f4471572b3f5e714fb350cca7fdcad7a9cfe7457d677c7b3c47",
+      "schema": {
+        "root": 0,
+        "nodes": [
+          {
+            "kind": "object",
+            "properties": [
+              {
+                "name": "data",
+                "type": 1,
+                "optional": false
+              },
+              {
+                "name": "ignorable",
+                "type": 3,
+                "optional": true
+              },
+              {
+                "name": "seq",
+                "type": 4,
+                "optional": false
+              },
+              {
+                "name": "time",
+                "type": 4,
+                "optional": false
+              },
+              {
+                "name": "type",
+                "type": 5,
+                "optional": false
+              }
+            ],
+            "indices": []
+          },
+          {
+            "kind": "object",
+            "properties": [
+              {
+                "name": "documentId",
+                "type": 2,
+                "optional": false
+              }
+            ],
+            "indices": []
+          },
+          {
+            "kind": "primitive",
+            "type": "string"
+          },
+          {
+            "kind": "literal",
+            "value": true
+          },
+          {
+            "kind": "primitive",
+            "type": "number"
+          },
+          {
+            "kind": "literal",
+            "value": "document/delete"
+          }
+        ]
+      }
+    },
+    {
+      "key": "event:document/update",
+      "kind": "event",
+      "event": "document/update",
+      "surface": false,
+      "digest": "91c39ee3a1b4b61efc59e45e19f4bdd136b0915f07aaefbb0562213d80692dc4",
+      "schema": {
+        "root": 0,
+        "nodes": [
+          {
+            "kind": "object",
+            "properties": [
+              {
+                "name": "data",
+                "type": 1,
+                "optional": false
+              },
+              {
+                "name": "ignorable",
+                "type": 9,
+                "optional": true
+              },
+              {
+                "name": "seq",
+                "type": 8,
+                "optional": false
+              },
+              {
+                "name": "time",
+                "type": 8,
+                "optional": false
+              },
+              {
+                "name": "type",
+                "type": 10,
+                "optional": false
+              }
+            ],
+            "indices": []
+          },
+          {
+            "kind": "object",
+            "properties": [
+              {
+                "name": "documentId",
+                "type": 2,
+                "optional": false
+              },
+              {
+                "name": "state",
+                "type": 3,
+                "optional": false
+              },
+              {
+                "name": "version",
+                "type": 8,
+                "optional": false
+              }
+            ],
+            "indices": []
+          },
+          {
+            "kind": "primitive",
+            "type": "string"
+          },
+          {
+            "kind": "union",
+            "types": [
+              2,
+              4,
+              5,
+              6,
+              7,
+              8
+            ]
+          },
+          {
+            "kind": "array",
+            "element": 3
+          },
+          {
+            "kind": "object",
+            "properties": [],
+            "indices": [
+              {
+                "key": 2,
+                "value": 3
+              }
+            ]
+          },
+          {
+            "kind": "primitive",
+            "type": "boolean"
+          },
+          {
+            "kind": "primitive",
+            "type": "null"
+          },
+          {
+            "kind": "primitive",
+            "type": "number"
+          },
+          {
+            "kind": "literal",
+            "value": true
+          },
+          {
+            "kind": "literal",
+            "value": "document/update"
+          }
+        ]
+      }
+    },
+    {
       "key": "event:feedback/message-delete",
       "kind": "event",
       "event": "feedback/message-delete",
@@ -16366,6 +16697,383 @@
       }
     },
     {
+      "key": "event:task/checkpoint",
+      "kind": "event",
+      "event": "task/checkpoint",
+      "surface": false,
+      "digest": "013d9bb26f3f9c39d5cfc021ef19b63cc9ae63131ee8130ce4381127a8b40c0b",
+      "schema": {
+        "root": 0,
+        "nodes": [
+          {
+            "kind": "object",
+            "properties": [
+              {
+                "name": "data",
+                "type": 1,
+                "optional": false
+              },
+              {
+                "name": "ignorable",
+                "type": 9,
+                "optional": true
+              },
+              {
+                "name": "seq",
+                "type": 8,
+                "optional": false
+              },
+              {
+                "name": "time",
+                "type": 8,
+                "optional": false
+              },
+              {
+                "name": "type",
+                "type": 10,
+                "optional": false
+              }
+            ],
+            "indices": []
+          },
+          {
+            "kind": "object",
+            "properties": [
+              {
+                "name": "state",
+                "type": 2,
+                "optional": false
+              },
+              {
+                "name": "taskId",
+                "type": 5,
+                "optional": false
+              }
+            ],
+            "indices": []
+          },
+          {
+            "kind": "union",
+            "types": [
+              3,
+              4,
+              5,
+              6,
+              7,
+              8
+            ]
+          },
+          {
+            "kind": "array",
+            "element": 2
+          },
+          {
+            "kind": "object",
+            "properties": [],
+            "indices": [
+              {
+                "key": 5,
+                "value": 2
+              }
+            ]
+          },
+          {
+            "kind": "primitive",
+            "type": "string"
+          },
+          {
+            "kind": "primitive",
+            "type": "boolean"
+          },
+          {
+            "kind": "primitive",
+            "type": "null"
+          },
+          {
+            "kind": "primitive",
+            "type": "number"
+          },
+          {
+            "kind": "literal",
+            "value": true
+          },
+          {
+            "kind": "literal",
+            "value": "task/checkpoint"
+          }
+        ]
+      }
+    },
+    {
+      "key": "event:task/end",
+      "kind": "event",
+      "event": "task/end",
+      "surface": false,
+      "digest": "4a908639ef777e07942cbda22b872f20baf4ada84dd5dcfc50ae565558df8668",
+      "schema": {
+        "root": 0,
+        "nodes": [
+          {
+            "kind": "object",
+            "properties": [
+              {
+                "name": "data",
+                "type": 1,
+                "optional": false
+              },
+              {
+                "name": "ignorable",
+                "type": 10,
+                "optional": true
+              },
+              {
+                "name": "seq",
+                "type": 2,
+                "optional": false
+              },
+              {
+                "name": "time",
+                "type": 2,
+                "optional": false
+              },
+              {
+                "name": "type",
+                "type": 11,
+                "optional": false
+              }
+            ],
+            "indices": []
+          },
+          {
+            "kind": "object",
+            "properties": [
+              {
+                "name": "durationMs",
+                "type": 2,
+                "optional": true
+              },
+              {
+                "name": "error",
+                "type": 3,
+                "optional": true
+              },
+              {
+                "name": "status",
+                "type": 5,
+                "optional": false
+              },
+              {
+                "name": "taskId",
+                "type": 4,
+                "optional": false
+              }
+            ],
+            "indices": []
+          },
+          {
+            "kind": "primitive",
+            "type": "number"
+          },
+          {
+            "kind": "object",
+            "properties": [
+              {
+                "name": "code",
+                "type": 4,
+                "optional": false
+              },
+              {
+                "name": "name",
+                "type": 4,
+                "optional": false
+              },
+              {
+                "name": "reason",
+                "type": 4,
+                "optional": true
+              }
+            ],
+            "indices": []
+          },
+          {
+            "kind": "primitive",
+            "type": "string"
+          },
+          {
+            "kind": "union",
+            "types": [
+              6,
+              7,
+              8,
+              9
+            ]
+          },
+          {
+            "kind": "literal",
+            "value": "aborted"
+          },
+          {
+            "kind": "literal",
+            "value": "completed"
+          },
+          {
+            "kind": "literal",
+            "value": "error"
+          },
+          {
+            "kind": "literal",
+            "value": "interrupted"
+          },
+          {
+            "kind": "literal",
+            "value": true
+          },
+          {
+            "kind": "literal",
+            "value": "task/end"
+          }
+        ]
+      }
+    },
+    {
+      "key": "event:task/start",
+      "kind": "event",
+      "event": "task/start",
+      "surface": false,
+      "digest": "7c3e4c5dc29f392ce55aa69698ebd67c38f619398d8414019f0cd6dd9f097f75",
+      "schema": {
+        "root": 0,
+        "nodes": [
+          {
+            "kind": "object",
+            "properties": [
+              {
+                "name": "data",
+                "type": 1,
+                "optional": false
+              },
+              {
+                "name": "ignorable",
+                "type": 12,
+                "optional": true
+              },
+              {
+                "name": "seq",
+                "type": 6,
+                "optional": false
+              },
+              {
+                "name": "time",
+                "type": 6,
+                "optional": false
+              },
+              {
+                "name": "type",
+                "type": 13,
+                "optional": false
+              }
+            ],
+            "indices": []
+          },
+          {
+            "kind": "object",
+            "properties": [
+              {
+                "name": "input",
+                "type": 2,
+                "optional": true
+              },
+              {
+                "name": "kind",
+                "type": 7,
+                "optional": false
+              },
+              {
+                "name": "ownerTaskId",
+                "type": 7,
+                "optional": true
+              },
+              {
+                "name": "replayPolicy",
+                "type": 9,
+                "optional": true
+              },
+              {
+                "name": "taskId",
+                "type": 7,
+                "optional": false
+              }
+            ],
+            "indices": []
+          },
+          {
+            "kind": "union",
+            "types": [
+              3,
+              4,
+              5,
+              6,
+              7,
+              8
+            ]
+          },
+          {
+            "kind": "array",
+            "element": 2
+          },
+          {
+            "kind": "primitive",
+            "type": "boolean"
+          },
+          {
+            "kind": "primitive",
+            "type": "null"
+          },
+          {
+            "kind": "primitive",
+            "type": "number"
+          },
+          {
+            "kind": "primitive",
+            "type": "string"
+          },
+          {
+            "kind": "object",
+            "properties": [],
+            "indices": [
+              {
+                "key": 7,
+                "value": 2
+              }
+            ]
+          },
+          {
+            "kind": "union",
+            "types": [
+              10,
+              11
+            ]
+          },
+          {
+            "kind": "literal",
+            "value": "safe"
+          },
+          {
+            "kind": "literal",
+            "value": "unsafe"
+          },
+          {
+            "kind": "literal",
+            "value": true
+          },
+          {
+            "kind": "literal",
+            "value": "task/start"
+          }
+        ]
+      }
+    },
+    {
       "key": "event:team/member",
       "kind": "event",
       "event": "team/member",
@@ -17736,7 +18444,7 @@
       "kind": "event",
       "event": "tool/ptc-dispatch",
       "surface": false,
-      "digest": "d66e11dddf5dfa3c71547e2cbd7b0608824cd8d6243fc16f532017ff28e8fba5",
+      "digest": "828101ffa04e98004e181e19e92514844a8d69c07b55b37d5b11e633885d496a",
       "schema": {
         "root": 0,
         "nodes": [
@@ -17785,6 +18493,11 @@
                 "optional": false
               },
               {
+                "name": "durationMs",
+                "type": 17,
+                "optional": true
+              },
+              {
                 "name": "error",
                 "type": 31,
                 "optional": true
@@ -17793,6 +18506,11 @@
                 "name": "isError",
                 "type": 32,
                 "optional": false
+              },
+              {
+                "name": "journalVersion",
+                "type": 17,
+                "optional": true
               },
               {
                 "name": "meta",
@@ -17810,6 +18528,11 @@
                 "optional": false
               },
               {
+                "name": "programFingerprint",
+                "type": 6,
+                "optional": true
+              },
+              {
                 "name": "rootCallId",
                 "type": 6,
                 "optional": false
@@ -17818,6 +18541,11 @@
                 "name": "subCallId",
                 "type": 6,
                 "optional": false
+              },
+              {
+                "name": "value",
+                "type": 33,
+                "optional": true
               }
             ],
             "indices": []
@@ -18187,7 +18915,7 @@
       "kind": "event",
       "event": "tool/ptc-dispatch-start",
       "surface": false,
-      "digest": "ec38b5949af8eacaf00df002f4acbe344f934f8a061e9cdc65a52a48e5f6dd93",
+      "digest": "bdf2821b0b03f74187082295f815f2946074f574a6dcfaa2e941f90fcc261098",
       "schema": {
         "root": 0,
         "nodes": [
@@ -18201,17 +18929,17 @@
               },
               {
                 "name": "ignorable",
-                "type": 4,
+                "type": 5,
                 "optional": true
               },
               {
                 "name": "seq",
-                "type": 5,
+                "type": 3,
                 "optional": false
               },
               {
                 "name": "time",
-                "type": 5,
+                "type": 3,
                 "optional": false
               },
               {
@@ -18231,23 +18959,33 @@
                 "optional": false
               },
               {
-                "name": "name",
+                "name": "journalVersion",
                 "type": 3,
+                "optional": true
+              },
+              {
+                "name": "name",
+                "type": 4,
                 "optional": false
               },
               {
                 "name": "parentCallId",
-                "type": 3,
+                "type": 4,
                 "optional": false
               },
               {
+                "name": "programFingerprint",
+                "type": 4,
+                "optional": true
+              },
+              {
                 "name": "rootCallId",
-                "type": 3,
+                "type": 4,
                 "optional": false
               },
               {
                 "name": "subCallId",
-                "type": 3,
+                "type": 4,
                 "optional": false
               }
             ],
@@ -18259,15 +18997,15 @@
           },
           {
             "kind": "primitive",
+            "type": "number"
+          },
+          {
+            "kind": "primitive",
             "type": "string"
           },
           {
             "kind": "literal",
             "value": true
-          },
-          {
-            "kind": "primitive",
-            "type": "number"
           },
           {
             "kind": "literal",
@@ -18281,7 +19019,7 @@
       "kind": "event",
       "event": "tool/result",
       "surface": true,
-      "digest": "7c9f44e90a0058f4cc532ae20dad0c10afa6eba22e70a6c79fc79490bad64397",
+      "digest": "65d9cca9d676613404e3aeddde75d16fedae11b4cfc5674a0d8073572c612d06",
       "schema": {
         "root": 0,
         "nodes": [
@@ -18300,7 +19038,7 @@
               },
               {
                 "name": "seq",
-                "type": 20,
+                "type": 2,
                 "optional": false
               },
               {
@@ -18315,7 +19053,7 @@
               },
               {
                 "name": "time",
-                "type": 20,
+                "type": 2,
                 "optional": false
               },
               {
@@ -18330,13 +19068,18 @@
             "kind": "object",
             "properties": [
               {
-                "name": "error",
+                "name": "durationMs",
                 "type": 2,
                 "optional": true
               },
               {
+                "name": "error",
+                "type": 3,
+                "optional": true
+              },
+              {
                 "name": "message",
-                "type": 4,
+                "type": 5,
                 "optional": false
               },
               {
@@ -18346,33 +19089,37 @@
               },
               {
                 "name": "step",
-                "type": 20,
+                "type": 2,
                 "optional": false
               },
               {
                 "name": "turn",
-                "type": 20,
+                "type": 2,
                 "optional": false
               }
             ],
             "indices": []
           },
           {
+            "kind": "primitive",
+            "type": "number"
+          },
+          {
             "kind": "object",
             "properties": [
               {
                 "name": "code",
-                "type": 3,
+                "type": 4,
                 "optional": false
               },
               {
                 "name": "name",
-                "type": 3,
+                "type": 4,
                 "optional": false
               },
               {
                 "name": "reason",
-                "type": 3,
+                "type": 4,
                 "optional": true
               }
             ],
@@ -18387,12 +19134,12 @@
             "properties": [
               {
                 "name": "content",
-                "type": 5,
+                "type": 6,
                 "optional": false
               },
               {
                 "name": "id",
-                "type": 3,
+                "type": 4,
                 "optional": false
               },
               {
@@ -18412,7 +19159,7 @@
               },
               {
                 "name": "toolCallId",
-                "type": 3,
+                "type": 4,
                 "optional": false
               }
             ],
@@ -18420,17 +19167,17 @@
           },
           {
             "kind": "array",
-            "element": 6
+            "element": 7
           },
           {
             "kind": "union",
             "types": [
-              7,
-              9,
-              11,
-              14,
-              16,
-              18,
+              8,
+              10,
+              12,
+              15,
+              17,
+              19,
               29
             ]
           },
@@ -18439,12 +19186,12 @@
             "properties": [
               {
                 "name": "text",
-                "type": 3,
+                "type": 4,
                 "optional": false
               },
               {
                 "name": "type",
-                "type": 8,
+                "type": 9,
                 "optional": false
               }
             ],
@@ -18459,12 +19206,12 @@
             "properties": [
               {
                 "name": "text",
-                "type": 3,
+                "type": 4,
                 "optional": false
               },
               {
                 "name": "type",
-                "type": 10,
+                "type": 11,
                 "optional": false
               }
             ],
@@ -18479,17 +19226,17 @@
             "properties": [
               {
                 "name": "tool",
-                "type": 12,
+                "type": 13,
                 "optional": true
               },
               {
                 "name": "toolName",
-                "type": 3,
+                "type": 4,
                 "optional": false
               },
               {
                 "name": "type",
-                "type": 13,
+                "type": 14,
                 "optional": false
               }
             ],
@@ -18508,12 +19255,12 @@
             "properties": [
               {
                 "name": "toolName",
-                "type": 3,
+                "type": 4,
                 "optional": false
               },
               {
                 "name": "type",
-                "type": 15,
+                "type": 16,
                 "optional": false
               }
             ],
@@ -18528,22 +19275,22 @@
             "properties": [
               {
                 "name": "arguments",
-                "type": 3,
+                "type": 4,
                 "optional": false
               },
               {
                 "name": "id",
-                "type": 3,
+                "type": 4,
                 "optional": false
               },
               {
                 "name": "name",
-                "type": 3,
+                "type": 4,
                 "optional": false
               },
               {
                 "name": "type",
-                "type": 17,
+                "type": 18,
                 "optional": false
               }
             ],
@@ -18558,7 +19305,7 @@
             "properties": [
               {
                 "name": "attachment",
-                "type": 19,
+                "type": 20,
                 "optional": false
               },
               {
@@ -18579,17 +19326,17 @@
             "properties": [
               {
                 "name": "attachmentId",
-                "type": 3,
+                "type": 4,
                 "optional": false
               },
               {
                 "name": "bytes",
-                "type": 20,
+                "type": 2,
                 "optional": false
               },
               {
                 "name": "height",
-                "type": 20,
+                "type": 2,
                 "optional": false
               },
               {
@@ -18599,7 +19346,7 @@
               },
               {
                 "name": "name",
-                "type": 3,
+                "type": 4,
                 "optional": true
               },
               {
@@ -18609,15 +19356,11 @@
               },
               {
                 "name": "width",
-                "type": 20,
+                "type": 2,
                 "optional": false
               }
             ],
             "indices": []
-          },
-          {
-            "kind": "primitive",
-            "type": "number"
           },
           {
             "kind": "union",
@@ -18649,12 +19392,12 @@
             "properties": [
               {
                 "name": "height",
-                "type": 20,
+                "type": 2,
                 "optional": false
               },
               {
                 "name": "width",
-                "type": 20,
+                "type": 2,
                 "optional": false
               }
             ],
@@ -18689,17 +19432,17 @@
             "properties": [
               {
                 "name": "attachmentId",
-                "type": 3,
+                "type": 4,
                 "optional": false
               },
               {
                 "name": "bytes",
-                "type": 20,
+                "type": 2,
                 "optional": false
               },
               {
                 "name": "name",
-                "type": 3,
+                "type": 4,
                 "optional": false
               }
             ],
@@ -18722,7 +19465,7 @@
             "properties": [
               {
                 "name": "callId",
-                "type": 3,
+                "type": 4,
                 "optional": false
               },
               {
@@ -18736,8 +19479,8 @@
           {
             "kind": "union",
             "types": [
-              3,
-              20,
+              2,
+              4,
               32,
               36,
               37,
@@ -18757,14 +19500,14 @@
             "properties": [],
             "indices": [
               {
-                "key": 3,
+                "key": 4,
                 "value": 35
               }
             ]
           },
           {
             "kind": "array",
-            "element": 20
+            "element": 2
           },
           {
             "kind": "union",
@@ -18782,7 +19525,7 @@
             "properties": [
               {
                 "name": "endSeq",
-                "type": 20,
+                "type": 2,
                 "optional": false
               },
               {
@@ -18792,7 +19535,7 @@
               },
               {
                 "name": "startSeq",
-                "type": 20,
+                "type": 2,
                 "optional": false
               }
             ],
@@ -22418,6 +23161,11 @@
       "sources": []
     },
     {
+      "digest": "013d9bb26f3f9c39d5cfc021ef19b63cc9ae63131ee8130ce4381127a8b40c0b",
+      "names": [],
+      "sources": []
+    },
+    {
       "digest": "0203243b72fc867afc81aff5f4cf2167e564ed342534eb612fc92f295cf07789",
       "names": [],
       "sources": []
@@ -22554,9 +23302,21 @@
       ]
     },
     {
+      "digest": "0b79e25c0bace482a93798011e8646d339d42d0685a58807bcd23b685e9b792b",
+      "names": [],
+      "sources": []
+    },
+    {
       "digest": "0b9b8facbe2c19773b3fb0ecc824ccbcc603d41b8f18069faa3807d449572fce",
       "names": [],
       "sources": []
+    },
+    {
+      "digest": "0ba1690bee5ffb2b9eb332ae2fd9b57369cb37ba9d5cefd2b2a7971ad901ab64",
+      "names": [],
+      "sources": [
+        "packages/core/session/src/types.ts:400"
+      ]
     },
     {
       "digest": "0bcfaf5566d271028429ac7b562cb59053c9d78b8ae14708c35fac835108d1b1",
@@ -22751,7 +23511,7 @@
       "digest": "17d1afb770d9941936130996da00dc86782cfef731d8d6526162c301256a4ac3",
       "names": [],
       "sources": [
-        "packages/core/session/src/types.ts:428"
+        "packages/core/session/src/types.ts:460"
       ]
     },
     {
@@ -22901,6 +23661,11 @@
       "sources": []
     },
     {
+      "digest": "1e83e946e1c3808f56274ddafdf5f60f53f376929c11de48c33ca4918276c6fd",
+      "names": [],
+      "sources": []
+    },
+    {
       "digest": "1ebc6f9ff3aa9e3a38f8695f49bacdab1f8b7a3832741853ca46f40af56ccd01",
       "names": [],
       "sources": []
@@ -22916,6 +23681,11 @@
       "sources": []
     },
     {
+      "digest": "1f7c0aa4b88354f2082d9379060b13d80af03f5d5058c01385ad1b27fe257f15",
+      "names": [],
+      "sources": []
+    },
+    {
       "digest": "1f8c126cfab3df812cd115cfc23e3256f0fa2383400f4ce91ecad313577e59b0",
       "names": [
         "packages/core/session/src/types.ts#TurnEndCancelCause"
@@ -22926,6 +23696,11 @@
     },
     {
       "digest": "1fdad624334d354820dfb3a26e28d0bc9fc1b62a33f87bab63f715b3f4391bfd",
+      "names": [],
+      "sources": []
+    },
+    {
+      "digest": "2049d63d1bd3843d88d913a745d162e5d1121efffc39389e5c6403eb239430fd",
       "names": [],
       "sources": []
     },
@@ -22964,6 +23739,16 @@
     },
     {
       "digest": "224aa11d4d5f88c450822d01b99e6ca5e3a9c7f26a5ede10bae33384a09ef4dc",
+      "names": [],
+      "sources": []
+    },
+    {
+      "digest": "2279430ef63283dfe6effc74f7459e7a81819f0325a6ba91654dda79bf522e96",
+      "names": [],
+      "sources": []
+    },
+    {
+      "digest": "22d2e2379c1154b9b4cb8174d35cd7c5cf87cd5986ea3ced19ad1dede2a95214",
       "names": [],
       "sources": []
     },
@@ -23145,15 +23930,6 @@
       "sources": []
     },
     {
-      "digest": "2fe5026daf14bd4ff2b7bfb7cf9791c302d9cbba06802178b6dfec00b892698f",
-      "names": [
-        "packages/core/tools/src/types.ts#PtcDispatchStartEventData"
-      ],
-      "sources": [
-        "packages/core/tools/src/types.ts:12"
-      ]
-    },
-    {
       "digest": "30d5a537b296685770b1241c4b4bbde19d5a31ff81aa23df73fab5e90b8fc65f",
       "names": [
         "packages/session/session-title/src/types.ts#SessionTitleSource"
@@ -23205,7 +23981,7 @@
         "packages/core/session/src/types.ts#SurfaceOp"
       ],
       "sources": [
-        "packages/core/session/src/types.ts:463"
+        "packages/core/session/src/types.ts:495"
       ]
     },
     {
@@ -23344,7 +24120,7 @@
         "packages/core/tools/src/index.ts#ToolRestriction"
       ],
       "sources": [
-        "packages/core/tools/src/index.ts:701"
+        "packages/core/tools/src/index.ts:747"
       ]
     },
     {
@@ -23493,6 +24269,11 @@
     },
     {
       "digest": "49dab019d00e8c26f27ad2ccff7b604d69e323ae4d17e0d2a7b6b8a830b1ade2",
+      "names": [],
+      "sources": []
+    },
+    {
+      "digest": "4a908639ef777e07942cbda22b872f20baf4ada84dd5dcfc50ae565558df8668",
       "names": [],
       "sources": []
     },
@@ -23693,13 +24474,6 @@
       "sources": []
     },
     {
-      "digest": "5302e763151277614b97e77f00e3b326694c6c1247b916a20503c344dc970777",
-      "names": [],
-      "sources": [
-        "packages/core/session/src/types.ts:376"
-      ]
-    },
-    {
       "digest": "530da6c0267813bb4511af72883cc518834e624e3b3220a7062955fd57a788a6",
       "names": [
         "packages/core/session/src/types.ts#RequestHeaderReason"
@@ -23729,6 +24503,13 @@
       "digest": "557e148d30b79ee48645850832b30c717d7c3b64641deb5d6133b8b4e91ee0b8",
       "names": [],
       "sources": []
+    },
+    {
+      "digest": "55e2ae45aed967671fa12c61bb08aea243b12b22f3fa8442726dd0979f002741",
+      "names": [],
+      "sources": [
+        "packages/core/session/src/types.ts:398"
+      ]
     },
     {
       "digest": "5654685d7557ec747e74887237065e626a5bdfa426ca43f7fbb0b6fee9b0916c",
@@ -23885,6 +24666,11 @@
       "sources": []
     },
     {
+      "digest": "5ec8a8788742077e24bd92524801ea62ed0f6b740e04a89ee0bdff919e9c280d",
+      "names": [],
+      "sources": []
+    },
+    {
       "digest": "5f2117d1856a5ab43c28371faa978ebfaa48f8c7d734ea3fc94842210df83dca",
       "names": [
         "packages/llm/llm/src/types.ts#LlmFailure"
@@ -23974,6 +24760,11 @@
       ]
     },
     {
+      "digest": "65d9cca9d676613404e3aeddde75d16fedae11b4cfc5674a0d8073572c612d06",
+      "names": [],
+      "sources": []
+    },
+    {
       "digest": "66ba70f6f068da443f969a0b947a013c3addd776b9b60a0a393759c19825e9a2",
       "names": [
         "packages/llm/llm/src/types.ts#ToolSchema"
@@ -24004,6 +24795,20 @@
       "digest": "68141cbe3994a5ffcd064c07c75996538437fd9dbf77ce8a2927e89ec577fabe",
       "names": [],
       "sources": []
+    },
+    {
+      "digest": "683cd700c55738991189105b915594565c75ddc6dd6c3310ac61671d00ac128c",
+      "names": [],
+      "sources": [
+        "packages/core/session/src/types.ts:407"
+      ]
+    },
+    {
+      "digest": "68666b7d1ae726644d00d2a0f6029f90c142131f82c10aabb1641f47b8e99f3e",
+      "names": [],
+      "sources": [
+        "packages/core/session/src/types.ts:418"
+      ]
     },
     {
       "digest": "688e853dc149f0d30b31765c12ec7e3be74169bdf1a4c6463a10b945d50cc1b8",
@@ -24230,6 +25035,11 @@
       "sources": []
     },
     {
+      "digest": "791a3bdf0c9d58811c0d0c7109ab871aa27d102600cd5c44044f1dbfad169bf4",
+      "names": [],
+      "sources": []
+    },
+    {
       "digest": "79650cfa10aa3c52440328d85e8a25f0ffadc8d7efd784e3c0819d8bb74a1985",
       "names": [],
       "sources": [
@@ -24264,6 +25074,11 @@
       "sources": []
     },
     {
+      "digest": "7c3e4c5dc29f392ce55aa69698ebd67c38f619398d8414019f0cd6dd9f097f75",
+      "names": [],
+      "sources": []
+    },
+    {
       "digest": "7c6129b6961cf4b2a030f36c78d2b0a5be38617651a9b81322e054ee512bee06",
       "names": [
         "packages/feedback/message-feedback/src/types.ts#MessageFeedbackDelete"
@@ -24271,11 +25086,6 @@
       "sources": [
         "packages/feedback/message-feedback/src/types.ts:46"
       ]
-    },
-    {
-      "digest": "7c9f44e90a0058f4cc532ae20dad0c10afa6eba22e70a6c79fc79490bad64397",
-      "names": [],
-      "sources": []
     },
     {
       "digest": "7d226b9fd95b4ba213d4237c22e930a91c3c769c95ca7f92977b9d625ba13438",
@@ -24376,12 +25186,26 @@
       ]
     },
     {
+      "digest": "8196183690c98793f929d9472bda95c000c8f9f870ea72c12d7fc65254a985eb",
+      "names": [
+        "packages/core/tools/src/types.ts#PtcDispatchStartEventData"
+      ],
+      "sources": [
+        "packages/core/tools/src/types.ts:12"
+      ]
+    },
+    {
       "digest": "82470020b5bfcb1a843e2aa05602af7d37df99e82d01f015c7c589ba054fd89d",
       "names": [],
       "sources": []
     },
     {
       "digest": "825ca23416b1ea9d81442afead5cf9229a6fa05842f042135cc3aa9710a6a2d8",
+      "names": [],
+      "sources": []
+    },
+    {
+      "digest": "828101ffa04e98004e181e19e92514844a8d69c07b55b37d5b11e633885d496a",
       "names": [],
       "sources": []
     },
@@ -24599,11 +25423,16 @@
       "digest": "8fcb0b44a575e998665c053643d1ab04c82f39253ebd190ac0c975b78e40b543",
       "names": [],
       "sources": [
-        "packages/core/tools/src/index.ts:35"
+        "packages/core/tools/src/index.ts:37"
       ]
     },
     {
       "digest": "904bf499d98be4a3a5f836fcac533b6c4899569b018071e6604e1d32657d00fd",
+      "names": [],
+      "sources": []
+    },
+    {
+      "digest": "91c39ee3a1b4b61efc59e45e19f4bdd136b0915f07aaefbb0562213d80692dc4",
       "names": [],
       "sources": []
     },
@@ -24642,6 +25471,13 @@
       "digest": "93d38436347f67c9022aacbc4472e283d722bcab8eb73fc376aaf7b6a6b9fb35",
       "names": [],
       "sources": []
+    },
+    {
+      "digest": "94308962d805b230952614f1163bdf548bdce6c0cc73ed86638577f6940b10af",
+      "names": [],
+      "sources": [
+        "packages/core/session/src/types.ts:376"
+      ]
     },
     {
       "digest": "94c56aeb1564ad735eb773d88636b40761d063efa1610f1308004d32923f5378",
@@ -24866,6 +25702,15 @@
       "sources": []
     },
     {
+      "digest": "a3bc424c3067846ae1a6bfde1f59ca0f334f49a913bcc6fb4f1eaa11a064e7c6",
+      "names": [
+        "packages/core/tools/src/types.ts#PtcDispatchEventData"
+      ],
+      "sources": [
+        "packages/core/tools/src/types.ts:24"
+      ]
+    },
+    {
       "digest": "a3c6f1ea38e9a61d7a9706057ba65aabe02dfe6d9dd90d4736aa62325d874531",
       "names": [],
       "sources": []
@@ -24920,7 +25765,8 @@
       "names": [],
       "sources": [
         "packages/core/session/src/types.ts:384",
-        "packages/core/tools/src/types.ts:27"
+        "packages/core/session/src/types.ts:404",
+        "packages/core/tools/src/types.ts:34"
       ]
     },
     {
@@ -25028,7 +25874,7 @@
       "digest": "ad0c38a0adb82a94c925456df41586d9b5f9202fca18593eae2213d4445b4585",
       "names": [],
       "sources": [
-        "packages/core/session/src/types.ts:391"
+        "packages/core/session/src/types.ts:423"
       ]
     },
     {
@@ -25058,6 +25904,11 @@
         "packages/llm/llm/src/message.ts:111",
         "packages/session/session-title/src/types.ts:35"
       ]
+    },
+    {
+      "digest": "adc4f96eaf98f4a5b7d1524d2f446ce0cfa6b18a2ac7713f4829efc47ee68a0c",
+      "names": [],
+      "sources": []
     },
     {
       "digest": "ade057f4fdc387aec6426f48704a1f9359cfc6fee13f27735b07f9b215ec16ca",
@@ -25208,6 +26059,11 @@
       "sources": []
     },
     {
+      "digest": "b5be068235dd40e0ed64fb0f6ea7074f0bc389dd6a029f4982964f4b0ca82f41",
+      "names": [],
+      "sources": []
+    },
+    {
       "digest": "b63b089a00b3b9357675b3e0c3d3e9aa4fdbda1fba9c91a6b0c59ffdbb89f505",
       "names": [
         "packages/schedule/schedule/src/types.ts#LegacyAtScheduleRecord"
@@ -25227,6 +26083,11 @@
       "sources": [
         "packages/core/session/src/types.ts:203"
       ]
+    },
+    {
+      "digest": "b6f42fe150cb26f98aeeda6f06fefd65eee3d34dcacdf481ac1e75cb3f61aa85",
+      "names": [],
+      "sources": []
     },
     {
       "digest": "b6f94c17dd9bbd7cd57015198b7c7c88407f0e3b89faab176ca3c11c3d864d3e",
@@ -25342,11 +26203,16 @@
       "digest": "bcf0caf62d964b2fcf5404bd5c909cfa9a21c3f3c96e6b7e36d9e33565223825",
       "names": [],
       "sources": [
-        "packages/core/session/src/types.ts:465"
+        "packages/core/session/src/types.ts:497"
       ]
     },
     {
       "digest": "bd499eac047efe091a4df7382eadd06d25cf0cb31fee3981e8b24d85762841cd",
+      "names": [],
+      "sources": []
+    },
+    {
+      "digest": "bdf2821b0b03f74187082295f815f2946074f574a6dcfaa2e941f90fcc261098",
       "names": [],
       "sources": []
     },
@@ -25485,6 +26351,11 @@
       "sources": []
     },
     {
+      "digest": "cd12e3debfde9326b9a02d3028903362d9e52f7b82e3292f06ef072214e3308a",
+      "names": [],
+      "sources": []
+    },
+    {
       "digest": "cd186c309e2bef305705e1d324139240f5e681f4f6a957d6a25b0225f65560df",
       "names": [],
       "sources": []
@@ -25507,13 +26378,9 @@
       ]
     },
     {
-      "digest": "cef171adf021a1867d244618a3dbbaafc22beb17c7f3df3ee203393271c8c6f6",
-      "names": [
-        "packages/core/tools/src/types.ts#PtcDispatchEventData"
-      ],
-      "sources": [
-        "packages/core/tools/src/types.ts:21"
-      ]
+      "digest": "cfb56fc34f0f0f4471572b3f5e714fb350cca7fdcad7a9cfe7457d677c7b3c47",
+      "names": [],
+      "sources": []
     },
     {
       "digest": "cffcdc19881ab61ec0a9ce18743996f7ac44ac8889f34dfac36ae745574aa22f",
@@ -25557,12 +26424,12 @@
       "sources": []
     },
     {
-      "digest": "d63b8b8ffad9c02fd80c43a17df4f240c1fe8118ecca9de34f9d5871838ab5b9",
+      "digest": "d5976165a4c35980712a5cb745d57a000c1029e6120b8a71d5cb6c0c83a1360a",
       "names": [],
       "sources": []
     },
     {
-      "digest": "d66e11dddf5dfa3c71547e2cbd7b0608824cd8d6243fc16f532017ff28e8fba5",
+      "digest": "d63b8b8ffad9c02fd80c43a17df4f240c1fe8118ecca9de34f9d5871838ab5b9",
       "names": [],
       "sources": []
     },
@@ -25650,6 +26517,13 @@
       "sources": []
     },
     {
+      "digest": "ddc1e01b9e26427c20468c715ec4fe5c76ab50948372a1a2a8780a391301cbc7",
+      "names": [],
+      "sources": [
+        "packages/core/session/src/types.ts:390"
+      ]
+    },
+    {
       "digest": "de25352d2dc4196309bd84b5bac6319f6d5c898ea0e82bb5ae66c5738d0d426f",
       "names": [],
       "sources": []
@@ -25695,6 +26569,11 @@
     },
     {
       "digest": "e0a787e6ec76c7c94fecbc501b489164ab0293db05bc947914077ad01e674f05",
+      "names": [],
+      "sources": []
+    },
+    {
+      "digest": "e0ee06d32b52139c1ec2ef07231f800cf98df9e5dd65a5ff3778ff6e3917f51e",
       "names": [],
       "sources": []
     },
@@ -25843,11 +26722,6 @@
     },
     {
       "digest": "ebb768d85ec87fb68e42fc14fd7d8535b5ac11791b14d04c6770180f0a719bf8",
-      "names": [],
-      "sources": []
-    },
-    {
-      "digest": "ec38b5949af8eacaf00df002f4acbe344f934f8a061e9cdc65a52a48e5f6dd93",
       "names": [],
       "sources": []
     },
@@ -26056,6 +26930,13 @@
       "digest": "f88f1b7b6bb733f685f5fb6a8744a5db9199fa53c90463ea1a33bad51153671d",
       "names": [],
       "sources": []
+    },
+    {
+      "digest": "f8abb653fbf31d0e340800cba69b23c2dff835f4d095d1fca023422b9cc17bd1",
+      "names": [],
+      "sources": [
+        "packages/core/session/src/types.ts:416"
+      ]
     },
     {
       "digest": "f90eb4ab2d3897bc20c521a038e3119d581f791ec974b1a0004f63a8ab9e232d",
