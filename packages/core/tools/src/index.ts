@@ -345,7 +345,10 @@ export class ToolsService extends Service {
    * @returns definitions after scoped shadowing and restrictions, limited to the step's admission when given.
    */
   definitions(scope?: ScopeKey, toolSet?: ResolvedToolSet): readonly ToolDefinition[] {
-    return toolSet === undefined ? [...this.view(scope).visible.values()] : [...toolSet.view(scope).values()]
+    // This is the model-facing view: a tool that withholds the model caller is
+    // invisible here, while `executable` can still dispatch it for a nested call.
+    const visible = toolSet === undefined ? this.view(scope).visible.values() : toolSet.view(scope).values()
+    return [...visible].filter(definition => acceptsCaller(definition, 'model'))
   }
 
   /**
@@ -400,7 +403,7 @@ export class ToolsService extends Service {
    * @returns projected schemas in registry order.
    */
   schemasForCaller(caller: ToolCaller, scope?: ScopeKey): ToolSchema[] {
-    return this.definitions(scope)
+    return [...this.view(scope).visible.values()]
       .filter(definition => acceptsCaller(definition, caller))
       .map(definition => projectToolSchema(definition, true))
   }
