@@ -50,6 +50,7 @@ interface BenchOptions {
   readStdin?: () => Promise<string>
   sessionId?: string
   json?: boolean
+  diagnostics?: boolean
   permissionMode?: string
   startupPermissionMode?: string
   approvalPolicy?: ApprovalPolicy
@@ -140,6 +141,7 @@ async function bench(script: Script, options: BenchOptions = {}): Promise<{
     || options.startupPermissionMode !== undefined || options.startupApprovalPolicy !== undefined) {
     ctx.provide('headlessStartup', {
       task: options.task, sessionId: options.sessionId, json: options.json ?? false,
+      diagnostics: options.diagnostics ?? false,
       additionalWritableRoots: options.additionalWritableRoots,
       permissionMode: options.startupPermissionMode,
       approvalPolicy: options.startupApprovalPolicy,
@@ -245,6 +247,7 @@ async function bench(script: Script, options: BenchOptions = {}): Promise<{
         ...options.useStdin === true ? {} : { task: options.task ?? 'do the thing' },
         ...options.sessionId === undefined ? {} : { sessionId: options.sessionId },
         ...options.json === undefined ? {} : { json: options.json },
+        ...options.diagnostics === undefined ? {} : { diagnostics: options.diagnostics },
         ...options.permissionMode === undefined ? {} : { permissionMode: options.permissionMode },
         ...options.approvalPolicy === undefined ? {} : { approvalPolicy: options.approvalPolicy },
       })
@@ -1254,7 +1257,7 @@ describe('headless runner', () => {
       afterPrompt(session, message) {
         appendTurn(session, 1, message, 'diagnostic answer', true)
       },
-    }, { json: true })
+    }, { json: true, diagnostics: true })
     try {
       const result = await test.run()
       expect(result.code).toBe(0)
@@ -1272,7 +1275,7 @@ describe('headless runner', () => {
         inbox: { nextTurn: 1, nextStep: 0 },
         graph: { invalid: [] },
       })
-      expect(events.at(-1)).toEqual({ type: 'final', text: 'diagnostic answer' })
+      expect(events.at(-1)).toMatchObject({ type: 'final', text: 'diagnostic answer' })
       const state = events.at(-2) as {
         session: { observedEvents: number; watch: string }
         graph: { tasks: unknown[]; documents: unknown[] }

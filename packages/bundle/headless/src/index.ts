@@ -37,6 +37,7 @@ import type {} from '@deepseek-ai/dsh-sandbox-policy'
 import type {} from './startup.ts'
 import { internals } from './runner-internals.ts'
 import { projectJsonRun, boundJsonLine } from './json-stream.ts'
+import type { JsonRunState } from './json-stream.ts'
 
 /** Stable Cordis plugin name. */
 export const name = 'headless-runner'
@@ -52,6 +53,8 @@ export interface Config {
   sessionId?: string
   /** Whether stdout carries the machine-readable event stream instead of final text. */
   json?: boolean
+  /** Whether JSON mode appends the durable graph/inbox/capability state event. */
+  diagnostics?: boolean
   /** Permission preset applied before the task; an explicit CLI flag takes precedence. Omission keeps current policy. */
   permissionMode?: string
   /** Approval behavior applied after preset selection; an explicit CLI flag takes precedence. Omission keeps current policy. */
@@ -62,6 +65,7 @@ export const Config: z<Config> = z.object({
   task: z.string(),
   sessionId: z.string(),
   json: z.boolean(),
+  diagnostics: z.boolean(),
   permissionMode: z.string(),
   approvalPolicy: z.union([...APPROVAL_POLICIES]),
 })
@@ -81,17 +85,12 @@ interface HeadlessIo {
 }
 
 /** Aggregate the interval's last assistant text; only its final turn can establish completion. */
-function summarize(session: Session, firstSeq: SessionLogOffset): RunOutcome {
+function summarizeEvents(events: readonly SessionEvent[], firstSeq: SessionLogOffset): RunOutcome {
   let started = false
   let text = ''
   let reason: SessionEvent<'turn/end'>['data']['reason'] | undefined
-  const length = session.seq
-  for (let seq = firstSeq; seq < length; seq++) {
-    // oxlint-disable-next-line typescript/no-deprecated -- Existing Session history read; migration deferred.
-    const event = session.eventAt(SessionSeq(seq))
-    if (event === undefined) {
-      throw new Error(`headless summary cannot read seq ${String(seq)} below captured length ${String(length)}`)
-    }
+  for (const event of events) {
+    if (event.seq < firstSeq) continue
     if (event.type === 'turn/start') {
       started = true
       reason = undefined
@@ -110,6 +109,66 @@ function summarize(session: Session, firstSeq: SessionLogOffset): RunOutcome {
   return { text, reason }
 }
 
+
+/**
+ * Build the compact, line-safe state record exposed to bot supervisors: the
+ * durable task/document graph, the pending inbox, and the capabilities this
+ * build provides.
+ * @param agent - the agent whose owned interval just finished.
+ * @param firstSeq - first durable sequence this invocation owned.
+ * @param observedEvents - events the watch delivered for that interval.
+ * @returns the state payload written before the terminal `final` event.
+ */
+function diagnosticsState(
+  agent: Agent,
+  firstSeq: SessionLogOffset,
+  observedEvents: readonly SessionEvent[],
+): JsonRunState {
+  const graph = agent.session.taskGraph()
+  return {
+    capabilities: {
+      inbox: true,
+      sessionWatch: true,
+      sessionClosed: true,
+      durableTaskGraph: true,
+      deterministicCodemodeReplay: true,
+      safeToolAutoRerun: true,
+    },
+    session: {
+      fromSeq: Number(firstSeq),
+      toSeqExclusive: Number(agent.session.seq),
+      observedEvents: observedEvents.length,
+      watch: 'drained',
+    },
+    inbox: {
+      nextTurn: agent.inbox.nextTurn.length,
+      nextStep: agent.inbox.nextStep.length,
+      nextTurnIds: agent.inbox.nextTurn.map(message => String(message.id)),
+      nextStepIds: agent.inbox.nextStep.map(message => String(message.id)),
+    },
+    graph: {
+      tasks: [...graph.tasks.values()].map(task => ({
+        taskId: task.taskId,
+        kind: task.kind,
+        status: task.end?.status ?? 'pending',
+        ...task.replayPolicy === undefined ? {} : { replayPolicy: task.replayPolicy },
+        ...task.ownerTaskId === undefined ? {} : { ownerTaskId: task.ownerTaskId },
+        checkpoints: task.checkpoints.length,
+        ...task.end?.durationMs === undefined ? {} : { durationMs: task.end.durationMs },
+      })),
+      documents: [...graph.documents.values()].map(document => ({
+        documentId: document.documentId,
+        kind: document.kind,
+        version: document.version,
+        scope: document.scope,
+        ...document.ownerTaskId === undefined ? {} : { ownerTaskId: document.ownerTaskId },
+        deleted: document.deleted,
+        seq: document.seq,
+      })),
+      invalid: graph.invalid,
+    },
+  }
+}
 
 /**
  * Project provider-reported reasoning from one owned run to stderr as it is
@@ -448,9 +507,12 @@ async function run(ctx: Context, config: Config, io: HeadlessIo): Promise<void> 
     }
     await sessions.flush(agent.session)
     if (failure !== undefined) throw failure.error
-    const outcome = summarize(agent.session, firstSeq)
+    const outcome = summarizeEvents(observedEvents, firstSeq)
+    const state = config.json === true && config.diagnostics === true
+      ? diagnosticsState(agent, firstSeq, observedEvents)
+      : undefined
     if (projection === undefined) io.stdout.write(outcome.text + '\n')
-    else projection.finish(outcome.text, outcome.reason)
+    else projection.finish(outcome.text, outcome.reason, state)
     if (outcome.reason?.kind === 'error') {
       io.stderr.write(`dsh: ${outcome.reason.error.code}: ${outcome.reason.error.message}\n`)
     }

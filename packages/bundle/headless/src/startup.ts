@@ -31,6 +31,8 @@ export interface HeadlessStartupValues {
   sessionId: string | undefined
   /** Whether stdout carries the machine-readable event stream instead of final text. */
   json: boolean
+  /** Whether JSON mode appends the durable graph/inbox/capability state event. */
+  diagnostics: boolean
   /** Permission preset to apply before the task; absent preserves session policy. */
   permissionMode?: string
   /** Approval behavior applied after the permission preset; absent keeps the current policy. */
@@ -130,6 +132,7 @@ export function apply(ctx: Context): void {
     }
     const options = program.opts<{
       json?: boolean
+      diagnostics?: boolean
       sessionId?: string
       permissionMode?: string
       approvalPolicy?: ApprovalPolicy
@@ -151,6 +154,7 @@ export function apply(ctx: Context): void {
       task,
       sessionId,
       json: options.json === true,
+      diagnostics: options.diagnostics === true,
       ...options.permissionMode === undefined ? {} : { permissionMode: options.permissionMode.trim() },
       ...options.approvalPolicy === undefined ? {} : { approvalPolicy: options.approvalPolicy },
       ...options.addDir === undefined ? {} : { additionalWritableRoots: [...new Set(options.addDir)] },

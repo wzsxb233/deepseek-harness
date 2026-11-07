@@ -91,7 +91,7 @@ export interface JsonRunState {
 /** The live handle of one `--json` projection. */
 export interface JsonProjection {
   /** Write the answer and durable turn reason; omission reports no terminal turn. */
-  finish(text: string, reason?: SessionEvent<'turn/end'>['data']['reason']): void
+  finish(text: string, reason?: SessionEvent<'turn/end'>['data']['reason'], state?: JsonRunState): void
   /** Stop observing the Session. */
   dispose(): void
 }
@@ -374,9 +374,10 @@ export function projectJsonRun(
   const stopSession = ctx.on('session/event', onSessionEvent)
 
   return {
-    finish(text: string, reason?: SessionEvent<'turn/end'>['data']['reason']): void {
+    finish(text: string, reason?: SessionEvent<'turn/end'>['data']['reason'], state?: JsonRunState): void {
       // The answer is the lossless terminal contract, so it is not truncated.
       if (disposed) return
+      if (state !== undefined) sink.write(`${JSON.stringify({ type: 'state', ...state })}\n`)
       sink.write(`${JSON.stringify({ type: 'final', sessionId: agent.id, reason: reason ?? null, text })}\n`)
     },
     dispose(): void {
