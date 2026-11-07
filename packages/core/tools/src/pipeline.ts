@@ -2,12 +2,14 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { ScopeKey } from '@deepseek-ai/dsh-scope'
 import { scopeTarget } from '@deepseek-ai/dsh-scope'
-import type { ContentBlock } from '@deepseek-ai/dsh-llm'
+import type { ContentBlock, ToolCallId } from '@deepseek-ai/dsh-llm'
+import { brandString } from '@deepseek-ai/dsh-brand'
 import { HarnessError } from '@deepseek-ai/dsh-llm'
 import type { UserMessage } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-user-approval'
 import { assertNever, deepFreeze, snapshotJsonValue, type JsonValue } from '@deepseek-ai/dsh-util-values'
-import { TOOL_ABORTED, TOOL_ABORTED_BEFORE_DISPATCH, ToolNotFoundError, ToolOutputError } from './contracts.ts'
+import { TOOL_ABORTED, TOOL_ABORTED_BEFORE_DISPATCH, ToolNotFoundError, ToolOutputError, acceptsCaller } from './contracts.ts'
+import type { NestedToolExecutionOptions, NestedToolExecutionResult, ToolCaller } from './contracts.ts'
 import { validateJsonSchemaValue } from './json-schema.ts'
 import type { ToolsService } from './index.ts'
 import type { ResolvedToolSet, ToolDefinition, ToolExecutionInput, ToolExecutionMode, ToolExecution, ToolRunContext, ToolExecutionResult, ToolExecutionSuccess, ToolErrorInfo, ToolExecutionToken, PreToolDecision, PostToolDecision } from './contracts.ts'
@@ -67,16 +69,20 @@ export class ToolExecutionPipeline {
     this.tools = ctx.tools
   }
 
-  private get(name: string, scope: ScopeKey | undefined, toolSet: ResolvedToolSet | undefined): ToolDefinition | undefined {
-    return this.source.get === undefined
+  private get(
+    name: string, scope: ScopeKey | undefined, toolSet: ResolvedToolSet | undefined, caller: ToolCaller = 'model',
+  ): ToolDefinition | undefined {
+    const definition = this.source.get === undefined
       ? this.tools.executable(name, scope, toolSet)
       : this.source.get(name, scope, toolSet)
+    // A definition that does not admit this caller class is invisible to it.
+    return definition !== undefined && acceptsCaller(definition, caller) ? definition : undefined
   }
 
   private resolveExecution(
     name: string, scope: ScopeKey | undefined, nested: boolean, toolSet: ResolvedToolSet | undefined,
   ): ToolDefinition | undefined {
-    const tool = this.get(name, scope, toolSet)
+    const tool = this.get(name, scope, toolSet, nested ? 'tools' : 'model')
     return tool !== undefined && this.source.reject?.(name, nested) === undefined ? tool : undefined
   }
 
@@ -94,6 +100,15 @@ export class ToolExecutionPipeline {
 
   /** Execution-prepared content installed before post-execute policy. */
   private contentProjectors = new WeakMap<ToolRunContext, ToolDefinition['projectContent']>()
+
+  /** Child calls a running body started, keyed by their parent's correlation token. */
+  private readonly ownedNested = new WeakMap<
+    object,
+    Map<string, { controller: AbortController; promise: Promise<NestedToolExecutionResult> }>
+  >()
+
+  /** Monotonic suffix shared by every nested call so child ids stay unique per parent. */
+  private nestedSequence = 0
 
   /**
    * Classify a pending call through the caller's visible tool definition. Only
@@ -142,6 +157,48 @@ export class ToolExecutionPipeline {
       },
       concludeTurn(this: ToolExecution): void {
         concludingExecutions.add(this)
+      },
+      executeTool: (
+        nestedName: string,
+        nestedArguments: unknown,
+        options: NestedToolExecutionOptions = {},
+      ): Promise<NestedToolExecutionResult> => {
+        const controller = new AbortController()
+        const nestedSignal = options.signal === undefined
+          ? AbortSignal.any([signal, controller.signal])
+          : AbortSignal.any([signal, options.signal, controller.signal])
+        const suffix = options.key === undefined
+          ? String(++this.nestedSequence)
+          : `${options.key}:${++this.nestedSequence}`
+        const childKey = `${String(callId)}:nested:${suffix}`
+        const startedAt = performance.now()
+        const promise = this.runNested({
+          callId: brandString<ToolCallId>(childKey),
+          rootCallId,
+          name: nestedName,
+          arguments: nestedArguments,
+          ...agent === undefined ? {} : { agent },
+          ...exec.toolSet === undefined ? {} : { toolSet: exec.toolSet },
+          parent: token,
+          signal: nestedSignal,
+        }).then((result) => {
+          const enriched = { ...result } as NestedToolExecutionResult
+          Object.defineProperty(enriched, 'taskId', { value: brandString<ToolCallId>(childKey), enumerable: false })
+          if (!result.isError) {
+            Object.defineProperty(enriched, 'durationMs', {
+              value: Math.max(0, performance.now() - startedAt), enumerable: false,
+            })
+          }
+          return Object.freeze(enriched)
+        })
+        let children = this.ownedNested.get(token)
+        if (children === undefined) {
+          children = new Map()
+          this.ownedNested.set(token, children)
+        }
+        const owned = children
+        owned.set(childKey, { controller, promise })
+        return promise.finally(() => { owned.delete(childKey) })
       },
     }
     // Capture callbacks before argument getters run; rejected calls retain finalization only when aborted.
@@ -255,6 +312,22 @@ export class ToolExecutionPipeline {
    * into any around-wrapper replacement. Cancellation never abandons the body:
    * a started promise reaches quiescence before its outcome becomes `ABORTED`.
    */
+  /**
+   * Run one nested call through the same admission, policy, cancellation and
+   * settlement pipeline as a model call, without a Session receipt: the parent
+   * owns the durable record and cites this child in its own result.
+   * @param input - child identity, arguments, scope and cancellation.
+   * @returns the child's settled canonical result.
+   */
+  private async runNested(input: ToolExecutionInput): Promise<ToolExecutionResult> {
+    const prepared = await this.prepare(input)
+    if (prepared.kind === 'dispatch') {
+      const dispatched = await this.dispatch(prepared.exec)
+      return this.complete(prepared.exec, dispatched)
+    }
+    return this.complete(prepared.exec, prepared)
+  }
+
   private async dispatchToolBody(exec: MutableToolRunContext): Promise<ToolExecutionResult> {
     const state = this.cancellationStates.get(exec)
     /* v8 ignore next -- only registry-minted executions reach the staged scheduler methods */
@@ -334,6 +407,9 @@ export class ToolExecutionPipeline {
    * @returns the same materialized result delivered to final observers.
    */
   async complete(exec: ToolRunContext, outcome: ScheduledToolDispatch): Promise<ToolExecutionResult> {
+    // A body may return while a child it started is still running; settle the
+    // parent only after those children are aborted and drained.
+    await this.settleOwnedNested(exec)
     switch (outcome.kind) {
       case 'final-result':
         return this.finish(exec, outcome.result)
@@ -371,6 +447,16 @@ export class ToolExecutionPipeline {
    * @returns the materialized final result.
    * @internal
    */
+  /** Abort children left running by a parent tool and wait for their outcomes. */
+  private async settleOwnedNested(exec: ToolRunContext): Promise<void> {
+    const children = this.ownedNested.get(exec.token)
+    if (children === undefined || children.size === 0) return
+    const active = [...children.values()]
+    for (const child of active) child.controller.abort(new Error(`parent tool "${exec.name}" settled`))
+    await Promise.allSettled(active.map(child => child.promise))
+    children.clear()
+  }
+
   private finish(exec: ToolRunContext, result: ToolExecutionResult): ToolExecutionResult {
     let materializedResult: ToolExecutionResult
     try {

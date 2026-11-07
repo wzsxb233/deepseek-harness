@@ -682,6 +682,16 @@ get(name: string, scope?: ScopeKey, toolSet?: ResolvedToolSet): ToolDefinition |
 executable(name: string, scope?: ScopeKey, toolSet?: ResolvedToolSet): ToolDefinition | undefined
 
 /**
+ * Recovery policy declared by a tool, read from the scope that owns the call.
+ * An unregistered or undeclared tool is `unsafe`: the conservative default
+ * never re-runs a call whose body may already have produced an effect.
+ * @param name - the tool name as registered.
+ * @param scope - the calling agent; omitted = the global view.
+ * @returns the declared replay policy, or `unsafe` when none is declared.
+ */
+replayPolicy(name: string, scope?: ScopeKey): ToolReplayPolicy
+
+/**
  * Resolve conditions once for this step without changing shared registrations.
  * Cancellation or a rejected condition publishes no partial selection. Removed
  * registrations cannot be restored by a late condition result.
@@ -699,11 +709,33 @@ async resolve(context: ToolActivationContext): Promise<ResolvedToolSet>
 definitions(scope?: ScopeKey, toolSet?: ResolvedToolSet): readonly ToolDefinition[]
 
 /**
- * Project visible definitions onto the allowlisted model-facing schema fields,
- * excluding execution and presentation callbacks.
- * @param scope - the viewing scope (the agent); omitted = the global view.
- * @param toolSet - step admission, or omitted for registered-definition inspection.
- * @returns one deep-cloned schema per visible tool.
+ * Rank the caller's currently visible tools with deterministic BM25 so a host
+ * can expose one search surface across native, PTC and codemode adapters.
+ * The reserved program transport is never a search result; ties preserve
+ * registry order.
+ * @param query - the caller's search text.
+ * @param scope - the calling agent; omitted = the global view.
+ * @param limit - maximum results; non-positive or non-finite yields none.
+ * @param caller - caller class whose admitted tools are searched.
+ * @returns ranked schemas in registry order on ties.
+ */
+searchTools(query: string, scope?: ScopeKey, limit: number = 8, caller: ToolCaller = 'model'): ToolSchema[]
+
+/**
+ * Model-facing schemas visible to one caller class. Nested callers (`tools`)
+ * see every definition that admits them, including ones withheld from the
+ * model so a program or composite can still dispatch them.
+ * @param caller - the execution caller class to filter by.
+ * @param scope - the calling agent; omitted = the global view.
+ * @returns projected schemas in registry order.
+ */
+schemasForCaller(caller: ToolCaller, scope?: ScopeKey): ToolSchema[]
+
+/**
+ * Model-facing schemas for every tool visible to the model in this scope.
+ * @param scope - the calling agent; omitted = the global view.
+ * @param toolSet - step admission, or omitted for the unrestricted view.
+ * @returns projected schemas in registry order.
  */
 schemas(scope?: ScopeKey, toolSet?: ResolvedToolSet): ToolSchema[]
 

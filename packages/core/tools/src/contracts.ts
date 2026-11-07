@@ -117,6 +117,11 @@ export interface ToolDefinition extends ToolSchema {
   presentResult?(args: unknown, result: ToolResult): ToolResultView | undefined
 }
 
+/** Whether a registered definition admits one execution caller class. */
+export function acceptsCaller(definition: ToolDefinition, caller: ToolCaller): boolean {
+  return definition.callers === undefined || definition.callers.includes(caller)
+}
+
 /** Inputs for a tool's step-time activation condition. */
 export interface ToolActivationContext {
   /** Agent preparing the step. */
@@ -274,6 +279,35 @@ export interface ToolRunContext extends ToolExecution {
    * conclude the enclosing run.
    */
   concludeTurn(): void
+  /**
+   * Execute another registered tool as a child of this call. The child uses
+   * the same agent scope and is rejected when the selected definition does not
+   * admit `callers: ['tools']`. Children outlive this call only until it
+   * settles: an unawaited child is aborted and drained first.
+   * @param name - registered child tool name.
+   * @param args - lossless JSON arguments for the child.
+   * @param options - optional child cancellation and stable key.
+   * @returns the child's canonical execution result.
+   */
+  executeTool?(name: string, args: unknown, options?: NestedToolExecutionOptions): Promise<NestedToolExecutionResult>
+}
+
+/** Options for one tool-to-tool nested execution. */
+export interface NestedToolExecutionOptions {
+  /** Optional cancellation owned by the nested caller in addition to its parent. */
+  readonly signal?: AbortSignal
+  /** Stable caller-provided label for diagnostics and replay-oriented logs. */
+  readonly key?: string
+  /** Whether a host wants live progress for this nested call (reserved for UI adapters). */
+  readonly progress?: boolean
+}
+
+/** One nested call's settled outcome, correlated with its durable child task. */
+export type NestedToolExecutionResult = ToolExecutionResult & {
+  /** Identity of the nested task the parent may cite in its own receipt. */
+  readonly taskId: ToolCallId
+  /** Monotonic elapsed time in milliseconds when the nested body ran. */
+  readonly durationMs?: number
 }
 
 /** Canonical error code for cancellation after a tool body was invoked. */

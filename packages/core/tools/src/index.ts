@@ -10,17 +10,12 @@ import type { ToolSchema } from '@deepseek-ai/dsh-llm'
 import { projectToolSchema } from './schema.ts'
 import { rankToolSearch } from './search.ts'
 import { assertSupportedJsonSchema } from './json-schema.ts'
-import { RUN_CODE_NAME, ToolActivationError } from './contracts.ts'
+import { acceptsCaller, RUN_CODE_NAME, ToolActivationError } from './contracts.ts'
 import type {
   ToolDefinition, ToolRestriction, ToolExecution, ToolGuard,
   ResolvedToolSet, ToolActivationContext, ToolRegistrationOptions,
   ToolCaller, ToolReplayPolicy,
 } from './contracts.ts'
-
-/** Whether a registered definition admits one execution caller class. */
-function acceptsCaller(definition: ToolDefinition, caller: ToolCaller): boolean {
-  return definition.callers === undefined || definition.callers.includes(caller)
-}
 
 function isToolCaller(value: unknown): value is ToolCaller {
   return value === 'model' || value === 'tools'
@@ -396,12 +391,26 @@ export class ToolsService extends Service {
     })
   }
 
+  /**
+   * Model-facing schemas visible to one caller class. Nested callers (`tools`)
+   * see every definition that admits them, including ones withheld from the
+   * model so a program or composite can still dispatch them.
+   * @param caller - the execution caller class to filter by.
+   * @param scope - the calling agent; omitted = the global view.
+   * @returns projected schemas in registry order.
+   */
   schemasForCaller(caller: ToolCaller, scope?: ScopeKey): ToolSchema[] {
     return this.definitions(scope)
       .filter(definition => acceptsCaller(definition, caller))
       .map(definition => projectToolSchema(definition, true))
   }
 
+  /**
+   * Model-facing schemas for every tool visible to the model in this scope.
+   * @param scope - the calling agent; omitted = the global view.
+   * @param toolSet - step admission, or omitted for the unrestricted view.
+   * @returns projected schemas in registry order.
+   */
   schemas(scope?: ScopeKey, toolSet?: ResolvedToolSet): ToolSchema[] {
     return this.definitions(scope, toolSet).map(definition => projectToolSchema(definition, true))
   }
