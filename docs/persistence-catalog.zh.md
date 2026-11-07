@@ -82,7 +82,8 @@
 | `event:tool-workflow/agent-start` | event | `5f26a6c20b37632f8f57729d171c671def4683d994ac6257a8dffcd855101627` | [`{ type: "tool-workflow/agent-start" }`](#persistence-type-sha256-5f26a6c20b37632f8f57729d171c671def4683d994ac6257a8dffcd855101627) |
 | `event:tool-workflow/run-end` | event | `42e0916e0dda5f6d1e7bb05d8514717147c036a79c9f36085683469516c1fd3f` | [`{ type: "tool-workflow/run-end" }`](#persistence-type-sha256-42e0916e0dda5f6d1e7bb05d8514717147c036a79c9f36085683469516c1fd3f) |
 | `event:tool-workflow/run-start` | event | `c1f9e0405de6d18cabb9ee70782a027f9bbdc57e5abec9dcccdd56119e2e9058` | [`{ type: "tool-workflow/run-start" }`](#persistence-type-sha256-c1f9e0405de6d18cabb9ee70782a027f9bbdc57e5abec9dcccdd56119e2e9058) |
-| `event:tool/call` | event | `3b1be838223869fe0a08210db85bf773796ed3f2373ac16555dff227cade0c48` | [`{ type: "tool/call" }`](#persistence-type-sha256-3b1be838223869fe0a08210db85bf773796ed3f2373ac16555dff227cade0c48) |
+| `event:tool/body-start` | event | `d3b5bb801ed7c0fa26047124f0c4fcac6c5dd73e6735253f9a6e14f0b6a6547c` | [`{ type: "tool/body-start" }`](#persistence-type-sha256-d3b5bb801ed7c0fa26047124f0c4fcac6c5dd73e6735253f9a6e14f0b6a6547c) |
+| `event:tool/call` | event | `5d5d7ec1468f8a12664ee4a770420cb46966ac6be3fc059cd8d3a0cd46810a98` | [`{ type: "tool/call" }`](#persistence-type-sha256-5d5d7ec1468f8a12664ee4a770420cb46966ac6be3fc059cd8d3a0cd46810a98) |
 | `event:tool/ptc-dispatch` | event | `828101ffa04e98004e181e19e92514844a8d69c07b55b37d5b11e633885d496a` | [`{ type: "tool/ptc-dispatch" }`](#persistence-type-sha256-828101ffa04e98004e181e19e92514844a8d69c07b55b37d5b11e633885d496a) |
 | `event:tool/ptc-dispatch-start` | event | `bdf2821b0b03f74187082295f815f2946074f574a6dcfaa2e941f90fcc261098` | [`{ type: "tool/ptc-dispatch-start" }`](#persistence-type-sha256-bdf2821b0b03f74187082295f815f2946074f574a6dcfaa2e941f90fcc261098) |
 | `event:tool/result` | event | `65d9cca9d676613404e3aeddde75d16fedae11b4cfc5674a0d8073572c612d06` | [`{ type: "tool/result" }`](#persistence-type-sha256-65d9cca9d676613404e3aeddde75d16fedae11b4cfc5674a0d8073572c612d06) |
@@ -168,7 +169,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 }[T]
 ```
 
-来源：[`packages/core/session/src/types.ts:464`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:472`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:495`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:526`](../packages/core/session/src/types.ts)
+来源：[`packages/core/session/src/types.ts:490`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:498`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:521`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:552`](../packages/core/session/src/types.ts)
 
 ## 事件
 
@@ -536,7 +537,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 }
 ```
 
-来源：[`packages/core/session/src/types.ts:407`](../packages/core/session/src/types.ts)
+来源：[`packages/core/session/src/types.ts:433`](../packages/core/session/src/types.ts)
 
 <a id="documentdelete--log-only"></a>
 
@@ -547,7 +548,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'document/delete': { documentId: string }
 ```
 
-来源：[`packages/core/session/src/types.ts:418`](../packages/core/session/src/types.ts)
+来源：[`packages/core/session/src/types.ts:444`](../packages/core/session/src/types.ts)
 
 <a id="documentupdate--log-only"></a>
 
@@ -558,7 +559,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'document/update': { documentId: string; version: number; state: JsonValue }
 ```
 
-来源：[`packages/core/session/src/types.ts:416`](../packages/core/session/src/types.ts)
+来源：[`packages/core/session/src/types.ts:442`](../packages/core/session/src/types.ts)
 
 ### `feedback/*`
 
@@ -803,7 +804,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'request/context': RequestContext
 ```
 
-来源：[`packages/core/session/src/types.ts:435`](../packages/core/session/src/types.ts)
+来源：[`packages/core/session/src/types.ts:461`](../packages/core/session/src/types.ts)
 
 <a id="requestheader--log-only"></a>
 
@@ -822,7 +823,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 }
 ```
 
-来源：[`packages/core/session/src/types.ts:423`](../packages/core/session/src/types.ts)
+来源：[`packages/core/session/src/types.ts:449`](../packages/core/session/src/types.ts)
 
 ### `sandbox/*`
 
@@ -899,7 +900,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'session/end-seed': { inherited?: true }
 ```
 
-来源：[`packages/core/session/src/types.ts:460`](../packages/core/session/src/types.ts)
+来源：[`packages/core/session/src/types.ts:486`](../packages/core/session/src/types.ts)
 
 <a id="sessiontitle--log-only"></a>
 
@@ -1061,7 +1062,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'task/checkpoint': { taskId: string; state: JsonValue }
 ```
 
-来源：[`packages/core/session/src/types.ts:398`](../packages/core/session/src/types.ts)
+来源：[`packages/core/session/src/types.ts:424`](../packages/core/session/src/types.ts)
 
 <a id="taskend--log-only"></a>
 
@@ -1077,7 +1078,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 }
 ```
 
-来源：[`packages/core/session/src/types.ts:400`](../packages/core/session/src/types.ts)
+来源：[`packages/core/session/src/types.ts:426`](../packages/core/session/src/types.ts)
 
 <a id="taskstart--log-only"></a>
 
@@ -1094,7 +1095,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 }
 ```
 
-来源：[`packages/core/session/src/types.ts:390`](../packages/core/session/src/types.ts)
+来源：[`packages/core/session/src/types.ts:416`](../packages/core/session/src/types.ts)
 
 ### `team/*`
 
@@ -1172,6 +1173,28 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 
 ### `tool/*`
 
+<a id="toolbody-start--log-only"></a>
+
+#### `tool/body-start` — log-only
+
+```ts persistence-catalog
+/**
+ * Durable marker that the tool body is about to run for one model-requested
+ * call: policy and approval have completed, and the next step is the tool
+ * body itself. Appended after `tool/call` (the intent) and before any
+ * external effect, so recovery can distinguish a call that never ran —
+ * policy refusal, pending approval, crash during policy — from one whose
+ * body may already have produced an effect.
+ *
+ * Log-only: it produces no surface node and no model-visible message.
+ */
+'tool/body-start': { turn: number; step: number; callId: ToolCallId }
+```
+
+类型：[ToolCallId](subsystems/core.zh.md)
+
+来源：[`packages/core/session/src/types.ts:388`](../packages/core/session/src/types.ts)
+
 <a id="toolcall--log-only"></a>
 
 #### `tool/call` — log-only
@@ -1182,7 +1205,22 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
  * JSON string exactly as the model produced it (unparsed). `callId` pairs the
  * call with its `tool/result`.
  */
-'tool/call': { turn: number; step: number; callId: ToolCallId; name: string; arguments: string }
+'tool/call': {
+  turn: number
+  step: number
+  callId: ToolCallId
+  name: string
+  arguments: string
+  /**
+   * Set by the durable tool-task journal, which separates the execution
+   * intent from the point at which the body actually starts
+   * ({@link 'tool/body-start'}). Recovery may treat an intent without a
+   * matching body-start as provably not run only for a log that declares
+   * this. Legacy logs omit it: there an intent may already have dispatched,
+   * so recovery keeps the conservative unknown-outcome classification.
+   */
+  bodyStartTracked?: true
+}
 ```
 
 类型：[ToolCallId](subsystems/core.zh.md)
@@ -1270,7 +1308,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 }
 ```
 
-来源：[`packages/core/session/src/types.ts:376`](../packages/core/session/src/types.ts)
+来源：[`packages/core/session/src/types.ts:402`](../packages/core/session/src/types.ts)
 
 ### `tool-workflow/*`
 
@@ -3034,6 +3072,14 @@ SHA-256: `fe792a6cd430494503837e21e79f91677704ccdd9e870c679aabd7d43ed47ddd`
 SHA-256: `cdca80b8dad24d4e7b1d5a288a8475ba8d8d46be385bd2da85f122ee836f1670`
 
 `"tool-workflow/run-start"`
+
+<a id="persistence-type-sha256-d5bacc66a6b1b903c8b2df11ee23f650c220d07539a8c083230ec939ed36485b"></a>
+
+### `"tool/body-start"`
+
+SHA-256: `d5bacc66a6b1b903c8b2df11ee23f650c220d07539a8c083230ec939ed36485b`
+
+`"tool/body-start"`
 
 <a id="persistence-type-sha256-c589e938cc0e4989df8b82abef6339de621f0dc4fe62c230d145b94996af7f92"></a>
 
@@ -5069,7 +5115,7 @@ SHA-256: `4e97c3d85c0fc817ee58873c38c25a2474abaaa0af4839311b50b68db3b8cf1a`
 
 SHA-256: `335e242de1fcc17b6ca920fc420d71bec2d76e53e37955c00948b65ab77f05c5`
 
-来源：[`packages/core/session/src/types.ts:495`](../packages/core/session/src/types.ts)
+来源：[`packages/core/session/src/types.ts:521`](../packages/core/session/src/types.ts)
 
 以下类型之一：
 
@@ -6034,17 +6080,18 @@ SHA-256: `a853902cfab417b8f08aa51ad6855fea46f34ed4588a74e47403035111d0fb86`
 | `name` | 必需 | `string` |
 | `source` | 必需 | [`CommandSource`](#persistence-type-sha256-ada310bf0bdb8fed51f3b56ea63f6ea6b18bbd587f04fccb63a14ab0b2a24e05) |
 
-<a id="persistence-type-sha256-e4c18e294232c3ba6c9f1999f168263cc55956147cfe4121720899be8e52edd1"></a>
+<a id="persistence-type-sha256-0e95da1d42f23608a2b6f1397466b8de06158c99d00101efc30c5fd6f67da416"></a>
 
-### `{ arguments, callId, name, step, … }`
+### `{ arguments, bodyStartTracked?, callId, name, … }`
 
-SHA-256: `e4c18e294232c3ba6c9f1999f168263cc55956147cfe4121720899be8e52edd1`
+SHA-256: `0e95da1d42f23608a2b6f1397466b8de06158c99d00101efc30c5fd6f67da416`
 
 来源：[`packages/core/session/src/types.ts:362`](../packages/core/session/src/types.ts)
 
 | 属性 | 存在性 | 类型 |
 |---|---|---|
 | `arguments` | 必需 | `string` |
+| `bodyStartTracked` | 可选 | `true` |
 | `callId` | 必需 | `string` |
 | `name` | 必需 | `string` |
 | `step` | 必需 | `number` |
@@ -6062,6 +6109,20 @@ SHA-256: `1528539c63db8b23506f0209a99ce77d8ad138adfbfcee3d4769b7382d93756c`
 |---|---|---|
 | `callId` | 必需 | `string` |
 | `files` | 必需 | [`PresentedFile[]`](#persistence-type-sha256-1d9cb3caa96100b18b1911fa3ff8c751ef6992971a03c5f4d9aefc1a0004a345) |
+| `turn` | 必需 | `number` |
+
+<a id="persistence-type-sha256-c7b1f838a955aa5c56848090ba395bf0f65f5cf733bc8183c4f30d218302db89"></a>
+
+### `{ callId, step, turn }`
+
+SHA-256: `c7b1f838a955aa5c56848090ba395bf0f65f5cf733bc8183c4f30d218302db89`
+
+来源：[`packages/core/session/src/types.ts:388`](../packages/core/session/src/types.ts)
+
+| 属性 | 存在性 | 类型 |
+|---|---|---|
+| `callId` | 必需 | `string` |
+| `step` | 必需 | `number` |
 | `turn` | 必需 | `number` |
 
 <a id="persistence-type-sha256-45f2a07ea94573123b6ae14db787a40062dec3834f36d8be92c523d40ba28448"></a>
@@ -6199,7 +6260,7 @@ SHA-256: `cbbe8377ee744964537dbafd83607219e58ba79a13f6db0d0645c7ad3d5e8a09`
 
 SHA-256: `a81059ca06999da1e712414520c2c65e491d052fcf9640fae20aa38f0a5dc735`
 
-来源：[`packages/core/session/src/types.ts:384`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:404`](../packages/core/session/src/types.ts) · [`packages/core/tools/src/types.ts:34`](../packages/core/tools/src/types.ts)
+来源：[`packages/core/session/src/types.ts:410`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:430`](../packages/core/session/src/types.ts) · [`packages/core/tools/src/types.ts:34`](../packages/core/tools/src/types.ts)
 
 | 属性 | 存在性 | 类型 |
 |---|---|---|
@@ -6406,7 +6467,7 @@ SHA-256: `119abe2b9c0b2f46ecb31d82b9acba4d4b30e049f655e2475e8b4ae12d5a9e25`
 
 SHA-256: `68666b7d1ae726644d00d2a0f6029f90c142131f82c10aabb1641f47b8e99f3e`
 
-来源：[`packages/core/session/src/types.ts:418`](../packages/core/session/src/types.ts)
+来源：[`packages/core/session/src/types.ts:444`](../packages/core/session/src/types.ts)
 
 | 属性 | 存在性 | 类型 |
 |---|---|---|
@@ -6418,7 +6479,7 @@ SHA-256: `68666b7d1ae726644d00d2a0f6029f90c142131f82c10aabb1641f47b8e99f3e`
 
 SHA-256: `683cd700c55738991189105b915594565c75ddc6dd6c3310ac61671d00ac128c`
 
-来源：[`packages/core/session/src/types.ts:407`](../packages/core/session/src/types.ts)
+来源：[`packages/core/session/src/types.ts:433`](../packages/core/session/src/types.ts)
 
 | 属性 | 存在性 | 类型 |
 |---|---|---|
@@ -6435,7 +6496,7 @@ SHA-256: `683cd700c55738991189105b915594565c75ddc6dd6c3310ac61671d00ac128c`
 
 SHA-256: `f8abb653fbf31d0e340800cba69b23c2dff835f4d095d1fca023422b9cc17bd1`
 
-来源：[`packages/core/session/src/types.ts:416`](../packages/core/session/src/types.ts)
+来源：[`packages/core/session/src/types.ts:442`](../packages/core/session/src/types.ts)
 
 | 属性 | 存在性 | 类型 |
 |---|---|---|
@@ -6449,7 +6510,7 @@ SHA-256: `f8abb653fbf31d0e340800cba69b23c2dff835f4d095d1fca023422b9cc17bd1`
 
 SHA-256: `94308962d805b230952614f1163bdf548bdce6c0cc73ed86638577f6940b10af`
 
-来源：[`packages/core/session/src/types.ts:376`](../packages/core/session/src/types.ts)
+来源：[`packages/core/session/src/types.ts:402`](../packages/core/session/src/types.ts)
 
 | 属性 | 存在性 | 类型 |
 |---|---|---|
@@ -6466,7 +6527,7 @@ SHA-256: `94308962d805b230952614f1163bdf548bdce6c0cc73ed86638577f6940b10af`
 
 SHA-256: `0ba1690bee5ffb2b9eb332ae2fd9b57369cb37ba9d5cefd2b2a7971ad901ab64`
 
-来源：[`packages/core/session/src/types.ts:400`](../packages/core/session/src/types.ts)
+来源：[`packages/core/session/src/types.ts:426`](../packages/core/session/src/types.ts)
 
 | 属性 | 存在性 | 类型 |
 |---|---|---|
@@ -6494,7 +6555,7 @@ SHA-256: `9e41386b3a0c9572b0d63078492ebb3997da7d3a830d44e0259418bd02f4bcb2`
 
 SHA-256: `bcf0caf62d964b2fcf5404bd5c909cfa9a21c3f3c96e6b7e36d9e33565223825`
 
-来源：[`packages/core/session/src/types.ts:497`](../packages/core/session/src/types.ts)
+来源：[`packages/core/session/src/types.ts:523`](../packages/core/session/src/types.ts)
 
 | 属性 | 存在性 | 类型 |
 |---|---|---|
@@ -6547,7 +6608,7 @@ SHA-256: `693f4952fb5565da96c06bace8924b098ac2fbc915fde0ff8019701183abc057`
 
 SHA-256: `ad0c38a0adb82a94c925456df41586d9b5f9202fca18593eae2213d4445b4585`
 
-来源：[`packages/core/session/src/types.ts:423`](../packages/core/session/src/types.ts)
+来源：[`packages/core/session/src/types.ts:449`](../packages/core/session/src/types.ts)
 
 | 属性 | 存在性 | 类型 |
 |---|---|---|
@@ -6644,7 +6705,7 @@ SHA-256: `e3e77b26f0148755a505f5b8ea843a3be117827d4703bb5754d9dc8ddbef521f`
 
 SHA-256: `17d1afb770d9941936130996da00dc86782cfef731d8d6526162c301256a4ac3`
 
-来源：[`packages/core/session/src/types.ts:460`](../packages/core/session/src/types.ts)
+来源：[`packages/core/session/src/types.ts:486`](../packages/core/session/src/types.ts)
 
 | 属性 | 存在性 | 类型 |
 |---|---|---|
@@ -6656,7 +6717,7 @@ SHA-256: `17d1afb770d9941936130996da00dc86782cfef731d8d6526162c301256a4ac3`
 
 SHA-256: `ddc1e01b9e26427c20468c715ec4fe5c76ab50948372a1a2a8780a391301cbc7`
 
-来源：[`packages/core/session/src/types.ts:390`](../packages/core/session/src/types.ts)
+来源：[`packages/core/session/src/types.ts:416`](../packages/core/session/src/types.ts)
 
 | 属性 | 存在性 | 类型 |
 |---|---|---|
@@ -8151,7 +8212,7 @@ SHA-256: `5dd766ccd1702a1142ad8b4bd44f2242f8e8a6752669ad3de0a5d224329b1438`
 
 SHA-256: `55e2ae45aed967671fa12c61bb08aea243b12b22f3fa8442726dd0979f002741`
 
-来源：[`packages/core/session/src/types.ts:398`](../packages/core/session/src/types.ts)
+来源：[`packages/core/session/src/types.ts:424`](../packages/core/session/src/types.ts)
 
 | 属性 | 存在性 | 类型 |
 |---|---|---|
@@ -9330,17 +9391,33 @@ SHA-256: `c1f9e0405de6d18cabb9ee70782a027f9bbdc57e5abec9dcccdd56119e2e9058`
 | `time` | 必需 | `number` |
 | `type` | 必需 | `"tool-workflow/run-start"` |
 
-<a id="persistence-type-sha256-3b1be838223869fe0a08210db85bf773796ed3f2373ac16555dff227cade0c48"></a>
+<a id="persistence-type-sha256-d3b5bb801ed7c0fa26047124f0c4fcac6c5dd73e6735253f9a6e14f0b6a6547c"></a>
+
+<a id="persistence-type-eventtoolbody-start"></a>
+
+### `{ type: "tool/body-start" }`
+
+SHA-256: `d3b5bb801ed7c0fa26047124f0c4fcac6c5dd73e6735253f9a6e14f0b6a6547c`
+
+| 属性 | 存在性 | 类型 |
+|---|---|---|
+| `data` | 必需 | [`{ callId, step, turn }`](#persistence-type-sha256-c7b1f838a955aa5c56848090ba395bf0f65f5cf733bc8183c4f30d218302db89) |
+| `ignorable` | 可选 | `true` |
+| `seq` | 必需 | `number` |
+| `time` | 必需 | `number` |
+| `type` | 必需 | `"tool/body-start"` |
+
+<a id="persistence-type-sha256-5d5d7ec1468f8a12664ee4a770420cb46966ac6be3fc059cd8d3a0cd46810a98"></a>
 
 <a id="persistence-type-eventtoolcall"></a>
 
 ### `{ type: "tool/call" }`
 
-SHA-256: `3b1be838223869fe0a08210db85bf773796ed3f2373ac16555dff227cade0c48`
+SHA-256: `5d5d7ec1468f8a12664ee4a770420cb46966ac6be3fc059cd8d3a0cd46810a98`
 
 | 属性 | 存在性 | 类型 |
 |---|---|---|
-| `data` | 必需 | [`{ arguments, callId, name, step, … }`](#persistence-type-sha256-e4c18e294232c3ba6c9f1999f168263cc55956147cfe4121720899be8e52edd1) |
+| `data` | 必需 | [`{ arguments, bodyStartTracked?, callId, name, … }`](#persistence-type-sha256-0e95da1d42f23608a2b6f1397466b8de06158c99d00101efc30c5fd6f67da416) |
 | `ignorable` | 可选 | `true` |
 | `seq` | 必需 | `number` |
 | `time` | 必需 | `number` |

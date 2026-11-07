@@ -27,6 +27,7 @@ export type DurableToolTaskStatus = 'pending' | 'intent-recorded' | 'settled'
 export class DurableToolTask {
   private state: DurableToolTaskStatus = 'pending'
   private callSeq: SessionSeq | undefined
+  private bodyStartSequence: SessionSeq | undefined
   private bodyStartedAt: number | undefined
 
   /**
@@ -50,12 +51,28 @@ export class DurableToolTask {
   /** Sequence of the committed execution intent, once recorded. */
   get intentSeq(): SessionSeq | undefined { return this.callSeq }
 
-  /** Mark the point at which the registry is about to invoke the tool body. */
-  markBodyStarted(): void {
+  /** Sequence of the committed body-start marker, once recorded. */
+  get bodyStartSeq(): SessionSeq | undefined { return this.bodyStartSequence }
+
+  /**
+   * Mark the point at which the registry is about to invoke the tool body.
+   * The marker is committed before the body runs, so recovery can tell a call
+   * that never started (policy, approval, a crash during policy) from one whose
+   * body may already have produced an external effect.
+   * @returns the sequence of the committed body-start marker.
+   */
+  markBodyStarted(): SessionSeq {
     if (this.state !== 'intent-recorded' || this.bodyStartedAt !== undefined) {
       throw new Error(`durable tool task "${this.block.id}" body cannot start from ${this.state}`)
     }
+    const event = this.session.append('tool/body-start', {
+      turn: this.turn,
+      step: this.step,
+      callId: this.block.id,
+    })
+    this.bodyStartSequence = event.seq
     this.bodyStartedAt = performance.now()
+    return event.seq
   }
 
   /** Commit the execution intent before any tool policy or body runs. */
@@ -69,6 +86,9 @@ export class DurableToolTask {
       callId: this.block.id,
       name: this.block.name,
       arguments: this.block.arguments,
+      // Declares that intent and body start are separate records, so recovery
+      // may classify an intent without a body-start as provably not run.
+      bodyStartTracked: true,
     })
     this.callSeq = event.seq
     this.state = 'intent-recorded'

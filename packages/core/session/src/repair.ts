@@ -124,7 +124,14 @@ export function openTurnClosers(
  * its step closes. This state retains pending identities, not event history.
  */
 export class ToolCallRecovery {
-  private readonly pendingCalls = new Map<ToolCallId, { turn: number; step: number; name: string; callSeq?: SessionSeqType }>()
+  private readonly pendingCalls = new Map<ToolCallId, {
+    turn: number
+    step: number
+    name: string
+    callSeq?: SessionSeqType
+    bodyStartTracked?: true
+    bodyStarted?: true
+  }>()
   private last: Pick<SessionEvent, 'seq' | 'time'> | undefined
 
   /** @param cause - defaults to interrupted live/crash recovery; fork-seed construction supplies its own cause. */
@@ -155,7 +162,15 @@ export class ToolCallRecovery {
         break
       case 'tool/call': {
         const entry = this.pendingCalls.get(event.data.callId)
-        if (entry) entry.callSeq = event.seq
+        if (entry) {
+          entry.callSeq = event.seq
+          if (event.data.bodyStartTracked === true) entry.bodyStartTracked = true
+        }
+        break
+      }
+      case 'tool/body-start': {
+        const entry = this.pendingCalls.get(event.data.callId)
+        if (entry) entry.bodyStarted = true
         break
       }
       case 'tool/result': {
@@ -188,8 +203,11 @@ export class ToolCallRecovery {
     const text = CLOSER_TEXT[this.cause.kind]
     // Close calls before their step: providers reject dangling assistant calls,
     // and Map insertion order preserves their transcript order.
-    for (const [callId, { turn, step, name, callSeq }] of this.pendingCalls) {
-      const started = callSeq !== undefined
+    for (const [callId, { turn, step, name, callSeq, bodyStartTracked, bodyStarted }] of this.pendingCalls) {
+      // A durable log separates intent from body start, so an intent without a
+      // body-start provably did not run. A legacy log (no `bodyStartTracked`)
+      // cannot make that distinction: keep the conservative classification.
+      const started = callSeq !== undefined && (bodyStartTracked !== true || bodyStarted === true)
       const safe = started && this.replayPolicy(name) === 'safe'
       if (safe && this.replaySafe?.(name) === true) continue
       const message: ToolResultMessage = deepFreeze({

@@ -21,6 +21,9 @@ describe('DurableToolTask', () => {
     expect(task.status).toBe('intent-recorded')
     expect(task.intentSeq).toBe(intentSeq)
     expect(session.snapshotEvents().map(event => event.type)).toEqual(['tool/call'])
+    // The intent declares that intent and body start are separate records, which
+    // is what lets recovery treat a missing body-start as provably not run.
+    expect(session.snapshotEvents()[0]?.data).toMatchObject({ bodyStartTracked: true })
 
     task.settle({ content: [{ type: 'text', text: 'ok' }], isError: false, value: { ok: true } })
     expect(task.status).toBe('settled')
@@ -58,9 +61,13 @@ describe('DurableToolTask', () => {
       type: 'tool-call', id: ToolCallId('call-duration-2'), name: 'read', arguments: '{}',
     })
     started.recordIntent()
-    started.markBodyStarted()
+    const bodyStartSeq = started.markBodyStarted()
     started.settle({ content: [], isError: false, value: null })
-    const settled = session.snapshotEvents()[3]
+    const bodyStart = session.snapshotEvents()[3]
+    expect(bodyStart?.type).toBe('tool/body-start')
+    expect(bodyStart?.seq).toBe(bodyStartSeq)
+    expect(bodyStart?.data).toMatchObject({ turn: 1, step: 2, callId: 'call-duration-2' })
+    const settled = session.snapshotEvents()[4]
     const duration = settled?.type === 'tool/result' ? settled.data.durationMs : undefined
     expect(duration).toEqual(expect.any(Number))
     expect(duration).toBeGreaterThanOrEqual(0)

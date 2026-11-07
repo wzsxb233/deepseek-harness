@@ -359,7 +359,33 @@ export interface SessionEventMap {
    * JSON string exactly as the model produced it (unparsed). `callId` pairs the
    * call with its `tool/result`.
    */
-  'tool/call': { turn: number; step: number; callId: ToolCallId; name: string; arguments: string }
+  'tool/call': {
+    turn: number
+    step: number
+    callId: ToolCallId
+    name: string
+    arguments: string
+    /**
+     * Set by the durable tool-task journal, which separates the execution
+     * intent from the point at which the body actually starts
+     * ({@link 'tool/body-start'}). Recovery may treat an intent without a
+     * matching body-start as provably not run only for a log that declares
+     * this. Legacy logs omit it: there an intent may already have dispatched,
+     * so recovery keeps the conservative unknown-outcome classification.
+     */
+    bodyStartTracked?: true
+  }
+  /**
+   * Durable marker that the tool body is about to run for one model-requested
+   * call: policy and approval have completed, and the next step is the tool
+   * body itself. Appended after `tool/call` (the intent) and before any
+   * external effect, so recovery can distinguish a call that never ran —
+   * policy refusal, pending approval, crash during policy — from one whose
+   * body may already have produced an effect.
+   *
+   * Log-only: it produces no surface node and no model-visible message.
+   */
+  'tool/body-start': { turn: number; step: number; callId: ToolCallId }
   /**
    * A completed tool call's model-facing result, optional internal failure
    * identity and user-facing reason, and optional tool-private `meta`

@@ -684,7 +684,9 @@ describe('tool-call scheduler: failure quiescence', () => {
     expect(executed).toEqual(phase === 'finalize' ? ['1', '2'] : ['1'])
     expect(results.map(event => [event.data.message.toolCallId, event.data.error?.code])).toEqual([
       [ToolCallId('c1'), undefined],
-      [ToolCallId('c2'), phase === 'execution-mode' ? TOOL_NOT_STARTED : TOOL_OUTCOME_UNKNOWN],
+      // Only a finalize failure leaves c2's body started; the other phases fail
+      // before the durable body-start marker, so nothing ran.
+      [ToolCallId('c2'), phase === 'finalize' ? TOOL_OUTCOME_UNKNOWN : TOOL_NOT_STARTED],
       [ToolCallId('c3'), TOOL_NOT_STARTED],
     ])
     expect(results[0]?.data.message).toMatchObject({
@@ -693,7 +695,7 @@ describe('tool-call scheduler: failure quiescence', () => {
     expect(results.slice(1).map(event => event.data.message.isError)).toEqual([true, true])
     expect(results.map(event => event.sourceEventSeqs)).toEqual([
       [calls[0]?.seq],
-      phase === 'execution-mode' ? undefined : [calls[1]?.seq],
+      phase === 'finalize' ? [calls[1]?.seq] : undefined,
       undefined,
     ])
     expect(failedEvents.slice(-3).map(event => event.type)).toEqual(['tool/result', 'step/end', 'turn/end'])
@@ -871,7 +873,8 @@ describe('tool-call scheduler: failure quiescence', () => {
     ])).toEqual([
       [ToolCallId('c1'), TOOL_OUTCOME_UNKNOWN],
       [ToolCallId('c2'), TOOL_OUTCOME_UNKNOWN],
-      [ToolCallId('c3'), TOOL_OUTCOME_UNKNOWN],
+      // c3 was still gated inside prepare, so its body never started.
+      [ToolCallId('c3'), TOOL_NOT_STARTED],
     ])
     expect(events(agent).findLast(event => event.type === 'turn/end')).toMatchObject({
       data: { reason: { kind: 'error', error: { message: schedulerError.message, code: 'UNKNOWN' } } },

@@ -1048,7 +1048,9 @@ describe('the session-persistence Agent Note: AgentLoop factory create/resume', 
       const stored = await readStoredEvents(next, sessionId)
       expect(stored.filter(event => event.type === 'tool/result').map(event => [
         event.data.message.toolCallId, event.data.error?.code,
-      ])).toEqual([[ToolCallId('started'), TOOL_OUTCOME_UNKNOWN], [ToolCallId('pending'), TOOL_NOT_STARTED]])
+        // `prepare` failed for both calls, so neither body started: a recorded
+        // intent without a body start is provably not run.
+      ])).toEqual([[ToolCallId('started'), TOOL_NOT_STARTED], [ToolCallId('pending'), TOOL_NOT_STARTED]])
       expect(stored.at(-1)).toMatchObject({
         type: 'turn/end', data: { reason: { kind: 'error', error: { code: 'UNKNOWN', message: 'scheduler prepare failed' } } },
       })
