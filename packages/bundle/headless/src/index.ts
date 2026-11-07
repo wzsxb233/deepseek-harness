@@ -110,6 +110,7 @@ function summarize(session: Session, firstSeq: SessionLogOffset): RunOutcome {
   return { text, reason }
 }
 
+
 /**
  * Project provider-reported reasoning from one owned run to stderr as it is
  * streamed, while keeping final outcome derivation on the durable log.
@@ -407,6 +408,18 @@ async function run(ctx: Context, config: Config, io: HeadlessIo): Promise<void> 
   const firstSeq = agent.session.seq
   const projection = config.json === true ? projectJsonRun(ctx, agent, io.stdout, { cwd }) : undefined
   const stopReasoning = projection === undefined ? streamReasoning(ctx, agent, io.stderr) : undefined
+  // Consume the durable watch for the exact interval owned by this invocation.
+  // The stream is the source for the final summary, so a resumed bot cannot
+  // accidentally fold an event appended by another lifecycle into its answer.
+  const runWatch = agent.session.watch(firstSeq)
+  const observedEvents: SessionEvent[] = []
+  const drainWatch = (async (): Promise<void> => {
+    for await (const event of runWatch) observedEvents.push(event)
+  })()
+  const stopWatch = async (): Promise<void> => {
+    await runWatch.return?.()
+    await drainWatch
+  }
   let failure: { error: unknown; atOffset: SessionLogOffset } | undefined
   const stopErrors = ctx.on('agent/error', ({ agent: subject, error }) => {
     if (subject === agent) failure = { error, atOffset: agent.session.seq }
@@ -431,6 +444,7 @@ async function run(ctx: Context, config: Config, io: HeadlessIo): Promise<void> 
       }
     } finally {
       stopReasoning?.()
+      await stopWatch()
     }
     await sessions.flush(agent.session)
     if (failure !== undefined) throw failure.error
@@ -442,6 +456,7 @@ async function run(ctx: Context, config: Config, io: HeadlessIo): Promise<void> 
     }
     io.exit(outcome.reason?.kind === 'completed' ? 0 : 1)
   } finally {
+    await stopWatch()
     stopErrors()
     stopTerminals()
     projection?.dispose()

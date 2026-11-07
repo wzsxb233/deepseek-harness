@@ -8,12 +8,45 @@ import type { ToolExecutor, ToolBatchInput, ToolBatchResult } from './executor.t
 import './events.ts'
 import type { ToolSchema } from '@deepseek-ai/dsh-llm'
 import { projectToolSchema } from './schema.ts'
+import { rankToolSearch } from './search.ts'
 import { assertSupportedJsonSchema } from './json-schema.ts'
 import { RUN_CODE_NAME, ToolActivationError } from './contracts.ts'
 import type {
   ToolDefinition, ToolRestriction, ToolExecution, ToolGuard,
   ResolvedToolSet, ToolActivationContext, ToolRegistrationOptions,
+  ToolCaller, ToolReplayPolicy,
 } from './contracts.ts'
+
+/** Whether a registered definition admits one execution caller class. */
+function acceptsCaller(definition: ToolDefinition, caller: ToolCaller): boolean {
+  return definition.callers === undefined || definition.callers.includes(caller)
+}
+
+function isToolCaller(value: unknown): value is ToolCaller {
+  return value === 'model' || value === 'tools'
+}
+
+function isToolReplayPolicy(value: unknown): value is ToolReplayPolicy {
+  return value === 'safe' || value === 'unsafe'
+}
+
+function validateReplayPolicy(name: string, replay: unknown): void {
+  if (replay === undefined || isToolReplayPolicy(replay)) return
+  throw new TypeError(`tool "${name}" replay must be "safe" or "unsafe"`)
+}
+
+function validateCallers(name: string, callers: readonly ToolCaller[] | undefined): void {
+  if (callers === undefined) return
+  if (callers.length === 0) throw new TypeError(`tool "${name}" callers must not be empty`)
+  const seen = new Set<ToolCaller>()
+  for (const caller of callers) {
+    if (!isToolCaller(caller)) {
+      throw new TypeError(`tool "${name}" callers contains unsupported caller "${String(caller)}"`)
+    }
+    if (seen.has(caller)) throw new TypeError(`tool "${name}" callers lists "${caller}" more than once`)
+    seen.add(caller)
+  }
+}
 
 declare module '@deepseek-ai/dsh-system-prompt' {
   interface AssembleContext {
@@ -134,6 +167,8 @@ export class ToolsService extends Service {
       throw new TypeError(`tool "${name}" must declare output { schema, render, presentationMeta? }`)
     }
     assertSupportedJsonSchema(output.schema)
+    validateCallers(name, definition.callers)
+    validateReplayPolicy(name, definition.replay)
     const timeoutMs = definition.timeoutMs
     if (timeoutMs !== undefined
       && (!Number.isFinite(timeoutMs) || timeoutMs <= 0)) {
@@ -255,6 +290,18 @@ export class ToolsService extends Service {
   }
 
   /**
+   * Recovery policy declared by a tool, read from the scope that owns the call.
+   * An unregistered or undeclared tool is `unsafe`: the conservative default
+   * never re-runs a call whose body may already have produced an effect.
+   * @param name - the tool name as registered.
+   * @param scope - the calling agent; omitted = the global view.
+   * @returns the declared replay policy, or `unsafe` when none is declared.
+   */
+  replayPolicy(name: string, scope?: ScopeKey): ToolReplayPolicy {
+    return this.get(name, scope)?.replay ?? 'unsafe'
+  }
+
+  /**
    * Resolve conditions once for this step without changing shared registrations.
    * Cancellation or a rejected condition publishes no partial selection. Removed
    * registrations cannot be restored by a late condition result.
@@ -313,6 +360,48 @@ export class ToolsService extends Service {
    * @param toolSet - step admission, or omitted for registered-definition inspection.
    * @returns one deep-cloned schema per visible tool.
    */
+  /**
+   * Model-facing schemas visible to one caller class. Nested callers (`tools`)
+   * see every definition that admits them, including ones withheld from the
+   * model so a program or composite can still dispatch them.
+   * @param caller - the execution caller class to filter by.
+   * @param scope - the calling agent; omitted = the global view.
+   * @returns projected schemas in registry order.
+   */
+  /**
+   * Rank the caller's currently visible tools with deterministic BM25 so a host
+   * can expose one search surface across native, PTC and codemode adapters.
+   * The reserved program transport is never a search result; ties preserve
+   * registry order.
+   * @param query - the caller's search text.
+   * @param scope - the calling agent; omitted = the global view.
+   * @param limit - maximum results; non-positive or non-finite yields none.
+   * @param caller - caller class whose admitted tools are searched.
+   * @returns ranked schemas in registry order on ties.
+   */
+  searchTools(query: string, scope?: ScopeKey, limit: number = 8, caller: ToolCaller = 'model'): ToolSchema[] {
+    if (!Number.isFinite(limit) || limit <= 0) return []
+    const bounded = Math.floor(limit)
+    const definitions = [...this.view(scope).visible.values()]
+      .filter(definition => definition.name !== RUN_CODE_NAME)
+      .filter(definition => acceptsCaller(definition, caller))
+    const byName = new Map(definitions.map(definition => [definition.name, definition]))
+    const names = rankToolSearch(query, definitions.map(definition => ({
+      name: definition.name,
+      text: `${definition.name} ${definition.description}`,
+    })), bounded)
+    return names.flatMap((name) => {
+      const definition = byName.get(name)
+      return definition === undefined ? [] : [projectToolSchema(definition, true)]
+    })
+  }
+
+  schemasForCaller(caller: ToolCaller, scope?: ScopeKey): ToolSchema[] {
+    return this.definitions(scope)
+      .filter(definition => acceptsCaller(definition, caller))
+      .map(definition => projectToolSchema(definition, true))
+  }
+
   schemas(scope?: ScopeKey, toolSet?: ResolvedToolSet): ToolSchema[] {
     return this.definitions(scope, toolSet).map(definition => projectToolSchema(definition, true))
   }

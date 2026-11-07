@@ -23,8 +23,10 @@
  * @module
  */
 
-import { globSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { execFileSync } from 'node:child_process'
+import { accessSync, constants, globSync, mkdirSync, realpathSync, symlinkSync } from 'node:fs'
+import { delimiter, join, resolve } from 'node:path'
+import { tmpdir } from 'node:os'
 import { PROXY_ENV_NAMES } from '../packages/util/http-proxy/src/policy.ts'
 
 /** The flag a Node process reads before honoring the names above; ambient in the same way. */
@@ -61,3 +63,40 @@ export function clearAmbientProxyEnv(env: NodeJS.ProcessEnv): string[] {
 }
 
 clearAmbientProxyEnv(process.env)
+
+/**
+ * Prefer an installed CPython 3.10+ for Vitest's Python PTC suites.
+ * macOS ships `/usr/bin/python3` as 3.9, while the runtime contract starts at
+ * 3.10. The production default remains `python3`; this test-only alias keeps
+ * local and CI-like runs on the same supported interpreter without changing
+ * user configuration.
+ */
+function preferSupportedPythonForTests(): void {
+  if (process.platform === 'win32') return
+  const candidates = ['python3.14', 'python3.13', 'python3.12', 'python3.11', 'python3.10']
+  let executable: string | undefined
+  for (const candidate of candidates) {
+    try {
+      const reported = execFileSync(candidate, ['-c', 'import sys; print(sys.executable)'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim()
+      if (reported.length === 0) continue
+      const resolved = realpathSync(reported)
+      accessSync(resolved, constants.X_OK)
+      executable = resolved
+      break
+    } catch {
+      // Try the next supported interpreter on PATH.
+    }
+  }
+  if (executable === undefined) return
+  const aliasDirectory = join(tmpdir(), 'dsh-vitest-python')
+  const alias = join(aliasDirectory, 'python3')
+  try {
+    mkdirSync(aliasDirectory, { recursive: true })
+    try { symlinkSync(executable, alias) } catch { /* Another Vitest worker installed the same alias. */ }
+    process.env.PATH = `${aliasDirectory}${delimiter}${process.env.PATH ?? ''}`
+  } catch {
+    // A read-only temp directory should not prevent unrelated test suites from running.
+  }
+}
+
+preferSupportedPythonForTests()

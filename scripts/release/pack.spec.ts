@@ -54,12 +54,19 @@ function packageFixture(root: string, directory: string, name: string, additions
 }
 
 function packGate(root: string, args: string[] = []): Gate {
+  const launcher = join(root, 'run-pack.mjs')
+  write(launcher, [
+    `process.chdir(${JSON.stringify(root)});`,
+    `process.argv[1] = ${JSON.stringify(packScript)};`,
+    `await import(${JSON.stringify(pathToFileURL(packScript).href)});`,
+    '',
+  ].join('\n'))
   return {
     id: 'release-pack-fixture',
     label: 'release pack fixture',
-    displayCommand: 'pnpm exec node release pack fixture',
+    displayCommand: 'node release pack fixture',
     command: process.execPath,
-    args: [pnpmEntry, '--dir', root, 'exec', process.execPath, '--import', tsxHook, packScript, '--family', 'vendor', '--out', 'packed', ...args],
+    args: ['--import', tsxHook, launcher, '--family', 'vendor', '--out', 'packed', ...args],
     env: { npm_execpath: pnpmEntry, DSH_PACK_FIXTURE: root, DSH_CLIENT_COMMIT_HASH: commit },
   }
 }
@@ -270,7 +277,8 @@ describe('release pack CLI', () => {
     expect(result.status, result.stderr).toBe(0)
     expect(readFileSync(join(root, 'packed', PUBLISH_ORDER_FILE), 'utf8')).toBe('\n')
     expect(readdirSync(join(root, 'packed'))).toEqual([PUBLISH_ORDER_FILE])
-    expect(existsSync(join(root, 'hooks.log'))).toBe(false)
+    const hookLog = join(root, 'hooks.log')
+    expect(existsSync(hookLog), existsSync(hookLog) ? readFileSync(hookLog, 'utf8') : 'no hooks').toBe(false)
   })
 
   it('leaves no publish order after a pack hook fails', async () => {

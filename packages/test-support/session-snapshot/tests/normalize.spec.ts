@@ -531,10 +531,19 @@ describe('normalizeSessionLog', () => {
     expect(out).toContain('"time0":0')
   })
 
-  it('leaves a non-hook event durationMs untouched (only hook/result is scrubbed)', () => {
-    const ev = JSON.stringify({ type: 'tool/result', seq: 2, time: 5, data: { durationMs: 88 } })
+  it('preserves replay fingerprint equality while normalizing workspace-dependent source hashes', () => {
+    const lines = ['first', 'first', 'second'].map((programFingerprint, index) => JSON.stringify({
+      type: index === 0 ? 'tool/ptc-dispatch-start' : 'tool/ptc-dispatch', data: { programFingerprint },
+    }))
+    const normalized = normalizeSessionLog(`${lines.join('\n')}\n`, ctx).trim().split('\n')
+      .map(line => JSON.parse(line) as { data: { programFingerprint: string } })
+    expect(normalized.map(record => record.data.programFingerprint)).toEqual(['{{program:1}}', '{{program:1}}', '{{program:2}}'])
+  })
+
+  it.each(['tool/result', 'tool/ptc-dispatch', 'task/end'])('normalizes monotonic receipt clocks in %s', (type) => {
+    const ev = JSON.stringify({ type, seq: 2, time: 5, data: { durationMs: 88 } })
     const out = normalizeSessionLog(`${header({})}\n${ev}\n`, ctx)
-    expect(out).toContain('"durationMs":88')
+    expect(out).toContain('"durationMs":0')
   })
 
   it('normalizes goal lifecycle clocks without scrubbing unrelated payload timestamps', () => {

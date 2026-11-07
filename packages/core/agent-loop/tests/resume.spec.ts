@@ -1,5 +1,5 @@
 import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
-import { ToolCallId, createMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
+import { ToolCallId, createMessage, createSystemMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
 import { afterEach, describe, expect, it, vi, type MockInstance } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { appendFile, mkdtemp, readdir, rm } from 'node:fs/promises'
@@ -10,7 +10,7 @@ import type { ContextFormed } from '@deepseek-ai/dsh-llm'
 import SessionStore, { SessionLogOffset, SessionSeq, Session, SessionId, TOOL_NOT_STARTED, TOOL_OUTCOME_UNKNOWN } from '@deepseek-ai/dsh-session'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
-import ToolRuntime from '@deepseek-ai/dsh-tools'
+import ToolRuntime, { defineTool } from '@deepseek-ai/dsh-tools'
 import { defineContentToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 import AgentRegistry, { type Agent } from '@deepseek-ai/dsh-agent'
 import { SessionAlreadyExistsError, type SessionHandle } from '@deepseek-ai/dsh-session-persistence'
@@ -575,6 +575,49 @@ describe('the session-persistence Agent Note: AgentLoop factory create/resume', 
     await ctx2.fiber.dispose()
   })
 
+  it.each(['safe', 'unsafe'] as const)('recovers with the current scoped %s replay policy and persists one result before closing', async (replay) => {
+    const sessionId = SessionId(`safe-recovery-${replay}`)
+    const { ctx, root } = await persistentHarness(new MockAdapter([textResponse('Recovered')]))
+    const seed = Session.create(sessionId)
+    seed.append('turn/start', { turn: 1 })
+    seed.append('step/start', { turn: 1, step: 1 })
+    seed.append('system/message', { turn: 1, step: 1, message: createSystemMessage('') }, { surfaceOp: 'append' })
+    seed.append('assistant/message', {
+      turn: 1, step: 1, stream: [],
+      message: createMessage({ role: 'assistant', source: { kind: 'model', provider: 'mock', model: 'mock' }, content: [
+        { type: 'tool-call', id: ToolCallId('recover-read'), name: 'read', arguments: '{}' },
+      ] }),
+    }, { surfaceOp: 'append' })
+    seed.append('tool/call', { turn: 1, step: 1, callId: ToolCallId('recover-read'), name: 'read', arguments: '{}' })
+    await seedStoredSession(ctx, sessionId, seed.snapshotEvents())
+    const body = vi.fn(async () => 'read result')
+    const globalBody = vi.fn(async () => 'wrong global result')
+    ctx.tools.register(defineTool({ name: 'read', description: 'Global read', parameters: {}, replay: 'safe',
+      output: { schema: { type: 'string' }, render: (_args, value) => [{ type: 'text', text: value }] }, execute: globalBody }))
+    const handle = await ctx.agents.resume({ resumeSessionId: sessionId,
+      agentOptions: { provider: 'mock', model: 'mock' },
+      setup: (agentCtx) => {
+        agentCtx.tools.register(defineTool({ name: 'read', description: 'Scoped read', parameters: {}, replay,
+          output: { schema: { type: 'string' }, render: (_args, value) => [{ type: 'text', text: value }] }, execute: body }))
+      },
+    })
+    await handle.agent.whenIdle()
+    await handle.dispose()
+    const events = await readStoredEvents(ctx, sessionId)
+    const receipts = events.filter(event => event.type === 'tool/result' && event.data.message.source.callId === ToolCallId('recover-read'))
+    expect(body).toHaveBeenCalledTimes(replay === 'safe' ? 1 : 0)
+    expect(globalBody).not.toHaveBeenCalled()
+    expect(receipts).toHaveLength(1)
+    expect(receipts[0]!.seq).toBeLessThan(events.find(event => event.type === 'step/end')!.seq)
+    expect(receipts[0]).toMatchObject({ data: replay === 'safe' ? { message: { isError: false } } : { error: { code: TOOL_OUTCOME_UNKNOWN } } })
+    await ctx.fiber.dispose()
+    const ctx2 = await mountPersistentHarness(root, new MockAdapter([]))
+    const resumed = await ctx2.agents.resume({ resumeSessionId: sessionId })
+    await resumed.dispose()
+    expect((await readStoredEvents(ctx2, sessionId)).filter(event => event.type === 'tool/result' && event.data.message.source.callId === ToolCallId('recover-read'))).toHaveLength(1)
+    await ctx2.fiber.dispose()
+  })
+
   it('resume over a torn physical tail continues from the committed prefix', async () => {
     const sessionId = SessionId('torn-tail-resume')
     const root = await mkdtemp(join(tmpdir(), 'dsh-resume-torn-'))
@@ -1065,7 +1108,8 @@ describe('the session-persistence Agent Note: AgentLoop factory create/resume', 
         if (input.log === undefined || input.agent === undefined) throw new Error('test expects a logged Agent step')
         const { agent, log: { turn, step } } = input
         const call = input.calls[0]!
-        agent.session.append('tool/call', { turn, step, callId: call.id, name: call.name, arguments: call.arguments })
+        // The real batch settlement marks the intent as body-start tracked.
+        agent.session.append('tool/call', { turn, step, callId: call.id, name: call.name, arguments: call.arguments, bodyStartTracked: true })
         throw new Error('executor failed after accepting its first call')
       }
       initial.agent.ctx.tools.setExecutor(executor)
@@ -1080,7 +1124,9 @@ describe('the session-persistence Agent Note: AgentLoop factory create/resume', 
       const stored = await readStoredEvents(next, sessionId)
       expect(stored.filter(event => event.type === 'tool/result').map(event => [
         event.data.message.toolCallId, event.data.error?.code,
-      ])).toEqual([[ToolCallId('started'), TOOL_OUTCOME_UNKNOWN], [ToolCallId('pending'), TOOL_NOT_STARTED]])
+        // `prepare` failed for both calls, so neither body started: a recorded
+        // intent without a body start is provably not run.
+      ])).toEqual([[ToolCallId('started'), TOOL_NOT_STARTED], [ToolCallId('pending'), TOOL_NOT_STARTED]])
       expect(stored.at(-1)).toMatchObject({
         type: 'turn/end', data: { reason: { kind: 'error', error: { code: 'UNKNOWN', message: 'executor failed after accepting its first call' } } },
       })

@@ -23,7 +23,23 @@ export interface ToolOutputDefinition {
 }
 
 /** A registered tool: its schema plus the execution function. */
+/**
+ * Caller classes a tool may accept: the model directly or another tool
+ * (a program or a composite dispatching a nested call).
+ */
+export type ToolCaller = 'model' | 'tools'
+
+/** Recovery policy for a call interrupted after its intent was recorded. */
+export type ToolReplayPolicy = 'safe' | 'unsafe'
+
 export interface ToolDefinition extends ToolSchema {
+  /**
+   * Caller classes allowed to execute this tool. Omission allows both; this
+   * control is runtime-only and never reaches a provider schema.
+   */
+  readonly callers?: readonly ToolCaller[]
+  /** Whether recovery may retry an interrupted call without external verification. */
+  readonly replay?: ToolReplayPolicy
   /** Mandatory canonical output declaration. */
   readonly output: ToolOutputDefinition
   /**

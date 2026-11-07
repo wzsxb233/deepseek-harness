@@ -24,9 +24,9 @@ import type {
   InboxState,
 } from '@deepseek-ai/dsh-agent'
 import { modelSelectionProjectionDefinition } from '@deepseek-ai/dsh-agent'
-import { errorChain, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
-import { interruptedTurnClosers, SessionLogOffset, SessionPreparation } from '@deepseek-ai/dsh-session'
-import type { Session, SessionHeader, SessionId } from '@deepseek-ai/dsh-session'
+import { createToolResultMessage, createUserMessage, errorChain, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
+import { interruptedTurnClosers, SessionLogOffset, SessionPreparation, SessionSeq } from '@deepseek-ai/dsh-session'
+import type { Session, SessionEvent, SessionHeader, SessionId } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-system-prompt'
 import type {} from '@deepseek-ai/dsh-tools'
 import type { ProjectionHandle } from '@deepseek-ai/dsh-session-projection'
@@ -43,6 +43,53 @@ const INACTIVE_STATES: ReadonlySet<FiberState> = new Set([
   FiberState.DISPOSED,
   FiberState.FAILED,
 ])
+
+/** Detect a started replay-safe call in an interrupted tail before the closer is appended. */
+interface ReplaySafeCall {
+  callId: SessionEvent<'tool/call'>['data']['callId']
+  name: string
+  arguments: string
+  callSeq: SessionSeq
+  turn: number
+  step: number
+}
+
+function replaySafeCalls(events: readonly SessionEvent[]): ReplaySafeCall[] {
+  const pending = new Map<string, { callId: ReplaySafeCall['callId']; name: string; arguments: string; callSeq?: SessionSeq; turn?: number; step?: number }>()
+  for (const event of events) {
+    switch (event.type) {
+      case 'turn/start':
+      case 'turn/end':
+      case 'step/end':
+        pending.clear()
+        break
+      case 'assistant/message':
+        for (const block of event.data.message.content) {
+          if (block.type === 'tool-call') pending.set(String(block.id), { callId: block.id, name: block.name, arguments: block.arguments })
+        }
+        break
+      case 'tool/call': {
+        const call = pending.get(String(event.data.callId))
+        if (call) {
+          call.arguments = event.data.arguments
+          call.callSeq = event.seq
+          call.turn = event.data.turn
+          call.step = event.data.step
+        }
+        break
+      }
+      case 'tool/result':
+        pending.delete(String(event.data.message.source.callId))
+        break
+      default:
+        break
+    }
+  }
+  return [...pending.values()].flatMap(call => call.callSeq !== undefined && call.turn !== undefined && call.step !== undefined
+    ? [{ callId: call.callId, name: call.name, arguments: call.arguments, callSeq: call.callSeq, turn: call.turn, step: call.step }]
+    : [])
+}
+
 
 /** Re-throw one collected failure as itself, or several as one `AggregateError`. */
 function throwCollectedFailures(failures: readonly unknown[], message: string): void {
@@ -170,6 +217,12 @@ interface AgentInitializationOptions {
   readonly stored?: StoredSession | undefined
   readonly setup?: AgentSetup | undefined
   readonly signal?: AbortSignal | undefined
+  /**
+   * Recovery step run inside the initialization maintenance barrier, after
+   * setup installed its scoped tools and before the agent publishes. Resume
+   * uses it to re-execute replay-safe interrupted calls and close the tail.
+   */
+  readonly recover?: ((agent: Agent, signal: AbortSignal) => Promise<void>) | undefined
 }
 
 declare module '@deepseek-ai/cordis' {
@@ -630,6 +683,8 @@ export class AgentLoop extends Service implements AgentFactory {
           assertLive()
           setupCommit?.commit()
           assertLive()
+          await options.recover?.(agent, abort.signal)
+          assertLive()
           // The mounted backend routes announced live events into the active
           // write handle by session id; the loop only owns the handle itself.
           detachAgent = loopCtx.agents.enter(agent)
@@ -780,6 +835,8 @@ export class AgentLoop extends Service implements AgentFactory {
       let handle: SessionHandle | undefined
       let stored: StoredSession | undefined
       let preparation: SessionPreparation | undefined
+      let replayCalls: ReplaySafeCall[] = []
+      let recoveryEvents: SessionEvent[] = []
       try {
         try {
           // Taking write ownership FIRST excludes a concurrent resume of the
@@ -797,7 +854,15 @@ export class AgentLoop extends Service implements AgentFactory {
           const coldRead = await handle.read(0, undefined, { signal: fused })
           fused.throwIfAborted()
           const persisted = coldRead.events
-          const closers = interruptedTurnClosers(persisted)
+          recoveryEvents = [...persisted]
+          const pending = replaySafeCalls(persisted)
+          // Setup may install scoped tools or shadow a global replay policy.
+          // Delay tail closure until that scope is known; never close a step
+          // before the replay receipt has reached durable storage.
+          const deferRecovery = pending.some(call => this.runtime.ctx.tools.replayPolicy(call.name) === 'safe')
+            || (pending.length > 0 && options.setup !== undefined)
+          replayCalls = deferRecovery ? pending : []
+          const closers = deferRecovery ? [] : interruptedTurnClosers(persisted)
           if (closers.length > 0) await handle.append(closers)
           preparation = SessionPreparation.create(this.runtime.ctx.sessions.prepare(id, {
             seed: [...persisted, ...closers],
@@ -821,6 +886,47 @@ export class AgentLoop extends Service implements AgentFactory {
           setup: options.setup,
           signal: options.signal,
           source: 'resume',
+          recover: replayCalls.length === 0 ? undefined : async (agent, signal) => {
+            let replayed = false
+            for (const call of replayCalls) {
+              signal.throwIfAborted()
+              if (agent.ctx.tools.replayPolicy(call.name, agent) !== 'safe') continue
+              const batch = await agent.ctx.tools.execute({
+                calls: [{ type: 'tool-call', id: call.callId, name: call.name, arguments: call.arguments }],
+                signal,
+                agent,
+              })
+              const result = batch.results.find(settled => settled.callId === call.callId)?.result
+              // An aborted invocation can have an unknown outcome. Keep its
+              // intent open so the next owner can safely recover it again.
+              signal.throwIfAborted()
+              if (result === undefined) continue
+              recoveryEvents.push(agent.session.append('tool/result', {
+                turn: call.turn,
+                step: call.step,
+                message: createToolResultMessage({ callId: call.callId, content: result.content, isError: result.isError }),
+                ...result.error?.info === undefined ? {} : { error: result.error.info },
+                ...result.meta === undefined ? {} : { meta: result.meta },
+              }, { surfaceOp: 'append', sourceEventSeqs: [call.callSeq] }))
+              await agent.ctx.sessions.flush(agent.session)
+              replayed = true
+            }
+            for (const closer of interruptedTurnClosers(recoveryEvents)) {
+              switch (closer.type) {
+                case 'tool/result':
+                  agent.session.append('tool/result', closer.data, { surfaceOp: 'append', ...closer.sourceEventSeqs === undefined ? {} : { sourceEventSeqs: closer.sourceEventSeqs } })
+                  break
+                case 'step/end': agent.session.append('step/end', closer.data); break
+                case 'turn/end': agent.session.append('turn/end', closer.data); break
+                default: throw new Error(`unexpected interrupted-turn closer: ${closer.type}`)
+              }
+            }
+            await agent.ctx.sessions.flush(agent.session)
+            if (replayed) agent.followup(createUserMessage({
+              content: [{ type: 'text', text: 'A replay-safe tool call was automatically re-executed after recovery. Continue from its result.' }],
+              source: { kind: 'runtime-context' },
+            }))
+          },
         })
       } finally {
         preparation?.[Symbol.dispose]()

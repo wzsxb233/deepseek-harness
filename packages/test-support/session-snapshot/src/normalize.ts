@@ -356,6 +356,7 @@ export function normalizeSessionLog(
   const identityMode = options.identityMode ?? 'legacy'
   const lines = rawLog.split('\n').filter(line => line.trim().length > 0)
   const parsed = lines.map(line => JSON.parse(line) as Record<string, unknown>)
+  const programTokens = new Map<string, string>()
   const jobTokens = new Map<string, string>()
   const reservedTokens = new Set(rawLog.match(/\{\{id:[1-9]\d*\}\}/g) ?? [])
   let nextJobToken = 1
@@ -408,9 +409,19 @@ export function normalizeSessionLog(
         }
       }
     }
-    if (record.type === 'hook/result' && record.data !== null && typeof record.data === 'object') {
+    if ((record.type === 'hook/result' || record.type === 'tool/result'
+      || record.type === 'tool/ptc-dispatch' || record.type === 'task/end')
+      && record.data !== null && typeof record.data === 'object') {
       const data = record.data as Record<string, unknown>
       if ('durationMs' in data) data.durationMs = 0
+    }
+    if ((record.type === 'tool/ptc-dispatch-start' || record.type === 'tool/ptc-dispatch')
+      && record.data !== null && typeof record.data === 'object') {
+      const data = record.data as Record<string, unknown>
+      if (typeof data.programFingerprint === 'string') {
+        if (!programTokens.has(data.programFingerprint)) programTokens.set(data.programFingerprint, `{{program:${programTokens.size + 1}}}`)
+        data.programFingerprint = programTokens.get(data.programFingerprint)
+      }
     }
     normalizeFeedbackClocks(record)
     if ((record.type === 'job/registered' || record.type === 'job/settled')

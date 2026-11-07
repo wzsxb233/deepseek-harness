@@ -21,6 +21,8 @@ export interface PtcDispatchStartEventData {
 export interface PtcDispatchEventData extends PtcDispatchStartEventData {
   isError: boolean
   content: ContentBlock[]
+  /** Monotonic elapsed time in milliseconds when the nested tool body ran. */
+  durationMs?: number
   /** Replayable tool-owned presentation metadata, separate from model content. */
   meta?: JsonValue
   /** Optional failure identity and raw user-facing detail, outside model-facing content. */

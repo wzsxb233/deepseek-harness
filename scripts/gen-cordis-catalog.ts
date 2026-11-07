@@ -822,6 +822,8 @@ export const LINK_MAP: Readonly<Record<string, string>> = {
   PostToolDecision: 'tools.md',
   PreToolDecision: 'tools.md',
   ToolDefinition: 'tools.md',
+  ToolReplayPolicy: 'tools.md',
+  ToolCaller: 'tools.md',
   ToolExecution: 'tools.md',
   ToolDispatchExecution: 'tools.md',
   ToolExecutionInput: 'tools.md',

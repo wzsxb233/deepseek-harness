@@ -51,6 +51,30 @@ function liveToolRequests(): LogicalSessionEvent<'assistant/message'> {
 }
 
 describe('ToolCallRecovery', () => {
+  it('keeps the interrupted step and turn open while a replay-safe call is deferred', () => {
+    const events: LogicalSessionEvent[] = [
+      { type: 'turn/start', seq: SessionSeq(19), time: 100, data: { turn: 3 } },
+      { type: 'step/start', seq: SessionSeq(20), time: 100, data: { turn: 3, step: 2 } },
+      liveToolRequests(),
+      { type: 'tool/call', seq: SessionSeq(22), time: 120,
+        data: { turn: 3, step: 2, callId: ToolCallId('started'), name: 'bash', arguments: '{}' } },
+    ]
+    const closers = repairInterruptedTurn(events, { replaySafe: name => name === 'bash' })
+    expect(closers.map(event => event.type)).toEqual(['tool/result'])
+    expect(closers[0]).toMatchObject({ data: { message: { toolCallId: 'pending' }, error: { code: TOOL_NOT_STARTED } } })
+  })
+  it('uses the supplied replay policy to tell the model when a started call is safe to retry', () => {
+    const recovery = new ToolCallRecovery(undefined, name => name === 'bash' ? 'safe' : 'unsafe')
+    recovery.observe(liveToolRequests())
+    recovery.observe({
+      type: 'tool/call', seq: SessionSeq(22), time: 120,
+      data: { turn: 3, step: 2, callId: ToolCallId('started'), name: 'bash', arguments: '{}' },
+    })
+    const result = recovery.results()[0]
+    expect(result?.data.message.content[0]?.type === 'text' ? result.data.message.content[0].text : '').toContain('this tool is declared replay-safe')
+    expect(result?.data.error?.code).toBe(TOOL_OUTCOME_UNKNOWN)
+  })
+
   it('observes a live step without earlier history and retains repairs until their commits arrive', () => {
     const recovery = new ToolCallRecovery()
     expect(recovery.results()).toEqual([])
@@ -362,6 +386,66 @@ describe.each(causes)('openTurnClosers (cause %o)', (cause) => {
     const closers = openTurnClosers(events, cause)
     // No pending calls → no synthetic tool/result, just step/end + turn/end.
     expect(closers.map(e => e.type)).toEqual(['step/end', 'turn/end'])
+  })
+})
+
+describe('durable intent versus body start', () => {
+  const cause: OpenTurnCloseCause = { kind: 'interrupted' }
+
+  /**
+   * One open turn with one unanswered call. `tracked` writes the durable
+   * journal's `bodyStartTracked` intent marker; `bodyStarted` adds the
+   * body-start record that only a dispatched call can have.
+   */
+  function openCall(options: { tracked: boolean; bodyStarted: boolean }): SessionEvent[] {
+    const events: SessionEvent[] = [
+      userTurnStart(1, 0),
+      { type: 'step/start', seq: 1, time: 1, data: { turn: 1, step: 1 } },
+      { type: 'assistant/message', seq: 2, time: 2, surfaceOp: 'append', data: {
+        turn: 1, step: 1,
+        message: createMessage({
+          role: 'assistant',
+          content: [{ type: 'tool-call', id: ToolCallId('call-1'), name: 'bash', arguments: '{}' }],
+          source: { kind: 'model', ...{ provider: 'mock', model: 'mock' } },
+        }),
+      } },
+      { type: 'tool/call', seq: 3, time: 3, data: {
+        turn: 1, step: 1, callId: ToolCallId('call-1'), name: 'bash', arguments: '{}',
+        ...options.tracked ? { bodyStartTracked: true as const } : {},
+      } },
+    ]
+    if (options.bodyStarted) {
+      events.push({ type: 'tool/body-start', seq: 4, time: 4, data: { turn: 1, step: 1, callId: ToolCallId('call-1') } })
+    }
+    return events
+  }
+
+  it('settles a tracked intent that never started its body as not started', () => {
+    const closers = openTurnClosers(openCall({ tracked: true, bodyStarted: false }), cause)
+    const result = closers[0]!
+    expect(result.type === 'tool/result' && result.data.error).toEqual({
+      name: 'ToolNotStartedError', code: TOOL_NOT_STARTED,
+    })
+    if (result.type !== 'tool/result' || result.data.message.content[0]?.type !== 'text') {
+      throw new Error('expected a text tool result')
+    }
+    expect(result.data.message.content[0].text).toContain('Retry it if it is still needed')
+  })
+
+  it('keeps the unknown outcome once the body-start marker is durable', () => {
+    const closers = openTurnClosers(openCall({ tracked: true, bodyStarted: true }), cause)
+    const result = closers[0]!
+    expect(result.type === 'tool/result' && result.data.error).toEqual({
+      name: 'ToolOutcomeUnknownError', code: TOOL_OUTCOME_UNKNOWN,
+    })
+  })
+
+  it('stays conservative for a legacy intent that does not declare body-start tracking', () => {
+    const closers = openTurnClosers(openCall({ tracked: false, bodyStarted: false }), cause)
+    const result = closers[0]!
+    expect(result.type === 'tool/result' && result.data.error).toEqual({
+      name: 'ToolOutcomeUnknownError', code: TOOL_OUTCOME_UNKNOWN,
+    })
   })
 })
 

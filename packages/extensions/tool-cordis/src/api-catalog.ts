@@ -6328,6 +6328,18 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type DshEnvironmentKey = `${typeof DSH_ENV_PREFIX}${string}`;',
   },
   {
+    name: 'DurableDocumentRecord',
+    declaration: 'export interface DurableDocumentRecord {\n    readonly documentId: string;\n    readonly kind: string;\n    readonly version: number;\n    readonly scope: \'session\' | \'task\' | \'conversation\';\n    readonly ownerTaskId?: string;\n    readonly state: unknown;\n    readonly deleted: boolean;\n    readonly seq: number;\n}',
+  },
+  {
+    name: 'DurableTaskGraph',
+    declaration: 'export interface DurableTaskGraph {\n    readonly tasks: ReadonlyMap<string, DurableTaskRecord>;\n    readonly documents: ReadonlyMap<string, DurableDocumentRecord>;\n    readonly invalid: readonly string[];\n}',
+  },
+  {
+    name: 'DurableTaskRecord',
+    declaration: 'export interface DurableTaskRecord {\n    readonly taskId: string;\n    readonly kind: string;\n    readonly ownerTaskId?: string;\n    readonly replayPolicy?: \'safe\' | \'unsafe\';\n    readonly input?: unknown;\n    readonly checkpoints: readonly {\n        readonly seq: number;\n        readonly state: unknown;\n    }[];\n    readonly end?: {\n        readonly seq: number;\n        readonly status: \'completed\' | \'error\' | \'aborted\' | \'interrupted\';\n        readonly durationMs?: number;\n        readonly error?: {\n            name: string;\n            code: string;\n            reason?: string;\n        };\n    };\n}',
+  },
+  {
     name: 'DynamicCordisPackage',
     declaration: 'export interface DynamicCordisPackage {\n    pluginId: CordisDynamicPluginId;\n    packageId: CordisDynamicPackageId;\n    pluginRunId: CordisDynamicPluginRunId;\n    name: string;\n}',
   },
@@ -7996,10 +8008,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type RequestErrorAction = {\n    kind: \'retry\';\n} | undefined;',
   },
   {
-    name: 'RequestHeaderReason',
-    declaration: 'export type RequestHeaderReason = \'initial\' | \'resume\' | \'change\' | \'series\';',
-  },
-  {
     name: 'RequestImageAttachment',
     declaration: 'export interface RequestImageAttachment {\n    variantId: ImageVariantId;\n    attachment: ImageAttachmentRef;\n    data: Uint8Array;\n    mediaType: ImageMediaType;\n    bytes: number;\n    width: number;\n    height: number;\n    depth: \'uchar\';\n    space: \'srgb\';\n    hasAlpha: boolean;\n}',
   },
@@ -8269,7 +8277,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'Session',
-    declaration: 'export class Session {\n    get surface(): SessionSurface;\n    readonly header: SessionHeader;\n    readonly inheritedEventCount: SessionLogOffset;\n    get id(): SessionId;\n    readonly firstLiveSeq: SessionLogOffset;\n    readonly firstLifecycleSeq: SessionLogOffset;\n    static create(id: SessionId, seed?: readonly SessionEvent[], header?: SessionHeader, inheritedEventCount?: SessionLogOffset, projections?: readonly SessionMessageProjection[]): Session;\n    static fromRestore(id: SessionId, seed: readonly SessionEvent[], header: SessionHeader, inheritedEventCount: SessionLogOffset, eventState: SessionSeedEventState, projections?: readonly SessionMessageProjection[]): Session;\n    eventAt(seq: SessionSeq): SessionEvent | undefined;\n    snapshotEvents(fromSeq: SessionLogOffset = SessionLogOffset(0), toSeqExclusive: SessionLogOffset = this.seq): readonly SessionEvent[];\n    ownEvents(): readonly SessionEvent[];\n    isOwnSeq(seq: SessionSeq): boolean;\n    get seq(): SessionLogOffset;\n    append<T extends SessionEventType>(type: T, data: SessionEventMap[T], ...opts: T extends SurfaceEventType ? [\n        opts: SurfaceIntent<T>\n    ] : [\n    ]): SessionEvent<T>;\n    requestHeader(): EpochHeader | undefined;\n    requestContext(): RequestContext | undefined;\n    toolHistory(): ToolHistory;\n    deriveMessages(): Message[];\n    deriveEventMessage(event: SessionEvent): Message | null;\n}',
+    declaration: 'export class Session {\n    get surface(): SessionSurface;\n    readonly header: SessionHeader;\n    readonly inheritedEventCount: SessionLogOffset;\n    get id(): SessionId;\n    readonly firstLiveSeq: SessionLogOffset;\n    readonly firstLifecycleSeq: SessionLogOffset;\n    static create(id: SessionId, seed?: readonly SessionEvent[], header?: SessionHeader, inheritedEventCount?: SessionLogOffset, projections?: readonly SessionMessageProjection[]): Session;\n    static fromRestore(id: SessionId, seed: readonly SessionEvent[], header: SessionHeader, inheritedEventCount: SessionLogOffset, eventState: SessionSeedEventState, projections?: readonly SessionMessageProjection[]): Session;\n    get closed(): Promise<SessionWatchEnd>;\n    taskGraph(): DurableTaskGraph;\n    watch(fromSeq: SessionLogOffset = this.seq): SessionEventWatch;\n    close(reason: SessionWatchEnd = { reason: \'closed\' }): void;\n    eventAt(seq: SessionSeq): SessionEvent | undefined;\n    snapshotEvents(fromSeq: SessionLogOffset = SessionLogOffset(0), toSeqExclusive: SessionLogOffset = this.seq): readonly SessionEvent[];\n    ownEvents(): readonly SessionEvent[];\n    isOwnSeq(seq: SessionSeq): boolean;\n    get seq(): SessionLogOffset;\n    append<T extends SessionEventType>(type: T, data: SessionEventMap[T], ...opts: T extends SurfaceEventType ? [\n        opts: SurfaceIntent<T>\n    ] : [\n    ]): SessionEvent<T>;\n    requestHeader(): EpochHeader | undefined;\n    requestContext(): RequestContext | undefined;\n    toolHistory():  /* …truncated — full shape in source */',
   },
   {
     name: 'SessionAccess',
@@ -8377,7 +8385,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SessionEventMap',
-    declaration: 'export interface SessionEventMap {\n    \'turn/start\': {\n        turn: number;\n    };\n    \'turn/end\': {\n        turn: number;\n        reason: TurnEndReason;\n    };\n    \'step/start\': {\n        turn: number;\n        step: number;\n    };\n    \'step/end\': {\n        turn: number;\n        step: number;\n    };\n    \'user/message\': UserMessage;\n    \'developer/message\': {\n        turn: number;\n        step: number;\n        message: DeveloperMessage;\n        headerSeq?: SessionSeq;\n    };\n    \'system/message\': {\n        turn: number;\n        step: number;\n        message: SystemMessage;\n    };\n    \'assistant/message\': {\n        turn: number;\n        step: number;\n        message: AssistantMessage;\n        stream: AssistantStreamRecord[];\n        usage?: TokenUsage;\n        interrupted?: true;\n    };\n    \'assistant/attempt\': {\n        turn: number;\n        step: number;\n        stream: AssistantStreamRecord[];\n    };\n    \'tool/call\': {\n        turn: number;\n        step: number;\n        callId: ToolCallId;\n        name: string;\n        arguments: string;\n    };\n    \'tool/result\': {\n        turn: number;\n        step: number;\n        message: ToolResultMessage;\n        error?: {\n            name: string;\n            code: string;\n            reason?: string;\n        };\n        meta?: JsonValue;\n    };\n    \'request/header\': {\n        header: EpochHeader;\n        reason: RequestHeaderReason;\n        startsSeries?: true;\n    };\n    \'request/context\': RequestContext;\n    \'session/end-seed\': {\n   /* …truncated — full shape in source */',
+    declaration: 'export interface SessionEventMap {\n    \'turn/start\': {\n        turn: number;\n    };\n    \'turn/end\': {\n        turn: number;\n        reason: TurnEndReason;\n    };\n    \'step/start\': {\n        turn: number;\n        step: number;\n    };\n    \'step/end\': {\n        turn: number;\n        step: number;\n    };\n    \'user/message\': UserMessage;\n    \'developer/message\': {\n        turn: number;\n        step: number;\n        message: DeveloperMessage;\n        headerSeq?: SessionSeq;\n    };\n    \'system/message\': {\n        turn: number;\n        step: number;\n        message: SystemMessage;\n    };\n    \'assistant/message\': {\n        turn: number;\n        step: number;\n        message: AssistantMessage;\n        stream: AssistantStreamRecord[];\n        usage?: TokenUsage;\n        interrupted?: true;\n    };\n    \'assistant/attempt\': {\n        turn: number;\n        step: number;\n        stream: AssistantStreamRecord[];\n    };\n    \'tool/call\': {\n        turn: number;\n        step: number;\n        callId: ToolCallId;\n        name: string;\n        arguments: string;\n    };\n    \'tool/result\': {\n        turn: number;\n        step: number;\n        message: ToolResultMessage;\n        error?: {\n            name: string;\n            code: string;\n            reason?: string;\n        };\n        meta?: JsonValue;\n        durationMs?: number;\n    };\n    \'task/start\': {\n        taskId: string;\n        kind: string;\n        ownerTaskId?: string;\n        replayPolicy?: \'safe\' | \'unsafe\';\n        input?: JsonValue; /* …truncated — full shape in source */',
   },
   {
     name: 'SessionEventMetadataFilter',
@@ -8434,6 +8442,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SessionEventType',
     declaration: 'export type SessionEventType = keyof SessionEventMap;',
+  },
+  {
+    name: 'SessionEventWatch',
+    declaration: 'export interface SessionEventWatch extends AsyncIterableIterator<SessionEvent> {\n    readonly end: Promise<SessionWatchEnd>;\n}',
   },
   {
     name: 'SessionEventWindow',
@@ -9596,6 +9608,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface ToolCallBlock {\n    type: \'tool-call\';\n    id: ToolCallId;\n    name: string;\n    arguments: string;\n}',
   },
   {
+    name: 'ToolCaller',
+    declaration: 'export type ToolCaller = \'model\' | \'tools\';',
+  },
+  {
     name: 'ToolCallId',
     declaration: 'export type ToolCallId = Branded<\'ToolCallId\'>;',
   },
@@ -9613,7 +9629,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ToolDefinition',
-    declaration: 'export interface ToolDefinition extends ToolSchema {\n    readonly output: ToolOutputDefinition;\n    execute(args: unknown, exec: ToolRunContext): Promise<unknown>;\n    projectContent?(exec: Readonly<ToolExecution>, result: Readonly<ToolExecutionResult>): ContentBlock[] | undefined;\n    finalizeContent?(exec: Readonly<ToolExecution>, result: Readonly<ToolExecutionResult>): ContentBlock[] | undefined;\n    timeoutMs?: number;\n    isConcurrencySafe?(args: unknown): boolean;\n    presentCall?(args: unknown): ToolCallView | undefined;\n    presentResult?(args: unknown, result: ToolResult): ToolResultView | undefined;\n}',
+    declaration: 'export interface ToolDefinition extends ToolSchema {\n    readonly callers?: readonly ToolCaller[];\n    readonly replay?: ToolReplayPolicy;\n    readonly output: ToolOutputDefinition;\n    execute(args: unknown, exec: ToolRunContext): Promise<unknown>;\n    projectContent?(exec: Readonly<ToolExecution>, result: Readonly<ToolExecutionResult>): ContentBlock[] | undefined;\n    finalizeContent?(exec: Readonly<ToolExecution>, result: Readonly<ToolExecutionResult>): ContentBlock[] | undefined;\n    timeoutMs?: number;\n    isConcurrencySafe?(args: unknown): boolean;\n    presentCall?(args: unknown): ToolCallView | undefined;\n    presentResult?(args: unknown, result: ToolResult): ToolResultView | undefined;\n}',
   },
   {
     name: 'ToolDispatchExecution',
@@ -9713,7 +9729,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ToolRunContext',
-    declaration: 'export interface ToolRunContext extends ToolExecution {\n    deferContext(context: UserMessage): void;\n    concludeTurn(): void;\n}',
+    declaration: 'export interface ToolRunContext extends ToolExecution {\n    deferContext(context: UserMessage): void;\n    concludeTurn(): void;\n    executeTool?(name: string, args: unknown, options?: NestedToolExecutionOptions): Promise<NestedToolExecutionResult>;\n}',
   },
   {
     name: 'ToolSchema',

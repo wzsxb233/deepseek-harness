@@ -202,23 +202,29 @@ describe('session-checkpoint-policy tool and step boundaries', () => {
     expect(ran).toBe(false)
   })
 
-  it('reuses the outer checkpoint for a nested tool dispatch', async () => {
+  it.each([false, true])('checkpoints nested dispatch admission before effects (failure=%s)', async (failure) => {
     const ctx = await setup()
     const session = ctx.sessions.create(SessionId('nested-tool'))
     const agent = { session } as Agent
     let flushes = 0
-    ctx.on('session/flush', () => { flushes += 1 })
+    ctx.on('session/flush', () => {
+      flushes += 1
+      if (failure) throw new Error('nested journal unavailable')
+    })
+    let ran = false
     ctx.tools.register({
       name: 'nested', description: 'nested', parameters: {},
       output: { schema: { type: 'null' }, render: () => [] },
-      execute: async () => null,
+      execute: async () => { ran = true; return null },
     })
-    await executeToolFixture(ctx, {
+    const result = await executeToolFixture(ctx, {
       callId: ToolCallId('nested-1'), name: 'nested', arguments: {}, agent,
       parent: Symbol('outer') as never,
       signal: new AbortController().signal,
     })
-    expect(flushes).toBe(0)
+    expect(flushes).toBe(1)
+    expect(ran).toBe(!failure)
+    expect(result.isError).toBe(failure)
   })
 
   it('checkpoints during pre-step processing', async () => {

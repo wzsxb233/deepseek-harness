@@ -56,6 +56,7 @@ function headlessCommand(): Command {
     .description('Answer one task and exit; the answer goes to stdout and diagnostics to stderr.')
     .helpOption('-h, --help', 'show this help')
     .option('--json', 'write newline-delimited run events to stdout instead of the final message')
+    .option('--diagnostics', 'with --json, append durable graph, inbox, and capability state')
     .option('--session-id <id>', 'adopt the persisted Session with this id; an unknown id is an error')
     .option('--permission-mode <preset>', 'select a configured permission preset for this task, including on resume')
     .addOption(new Option('--approval-policy <policy>', 'set approval behavior after selecting the permission preset')
@@ -68,6 +69,7 @@ Examples:
   dsh --profile headless "run the tests"          answer one task and exit
   echo "run the tests" | dsh --profile headless   read the task from stdin
   dsh --profile headless --json "run the tests"   emit machine-readable run events
+  dsh --profile headless --json --diagnostics "run the tests"   include durable bot state
   dsh --profile headless --session-id session-… "continue"   resume an existing Session
   dsh --profile headless --permission-mode workspace-write --add-dir /repo/.git "commit the fix"
                                                         grant shared Git metadata for this task

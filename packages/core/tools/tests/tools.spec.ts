@@ -105,6 +105,16 @@ describe('ToolRuntime', () => {
     }
   })
 
+  it('searches the resolved tool catalog with deterministic BM25 ranking', async () => {
+    const ctx = await setup()
+    ctx.tools.register(defineContentToolFixture({ name: 'read_file', description: 'Read source files from disk', parameters: {}, async execute() { return [] } }))
+    ctx.tools.register(defineContentToolFixture({ name: 'search_issues', description: 'Search tracked issues by query', parameters: {}, async execute() { return [] } }))
+    ctx.tools.register(defineContentToolFixture({ name: 'write_file', description: 'Write a file to disk', parameters: {}, async execute() { return [] } }))
+    expect(ctx.tools.searchTools('issue search').map(tool => tool.name)).toEqual(['search_issues'])
+    expect(ctx.tools.searchTools('file', undefined, 2).map(tool => tool.name)).toEqual(['write_file', 'read_file'])
+    expect(ctx.tools.searchTools('the and of')).toEqual([])
+  })
+
   it('registers tools, exposes schemas, and feeds the system-prompt assembly', async () => {
     const ctx = await setup()
     ctx.tools.register(echoTool)

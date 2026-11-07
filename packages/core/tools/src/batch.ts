@@ -160,6 +160,8 @@ async function runGroup(
     throwSchedulerFailure()
     switch (prepared.kind) {
       case 'dispatch': {
+        // oxlint-disable-next-line typescript/no-non-null-assertion -- bounded index
+        settlement.bodyStarted(call!.block)
         const promise = pipeline.dispatch(prepared.exec).then(
           (outcome) => {
             slots[index] = { ...outcome, exec: prepared.exec }
@@ -246,7 +248,18 @@ class BatchSettlement {
     // oxlint-disable-next-line typescript/no-non-null-assertion -- ToolBatchInput requires agent whenever log is provided
     return agent!.session.append('tool/call', {
       turn, step, callId: block.id, name: block.name, arguments: block.arguments,
+      // Intent and body start are separate records: recovery may treat an
+      // intent without a body-start as provably not run.
+      bodyStartTracked: true,
     }).seq
+  }
+
+  /** Record that the body is about to run, after policy and before the effect. */
+  bodyStarted(block: ToolCallBlock): void {
+    if (this.input.log === undefined) return
+    const { agent, log: { turn, step } } = this.input
+    // oxlint-disable-next-line typescript/no-non-null-assertion -- ToolBatchInput requires agent whenever log is provided
+    agent!.session.append('tool/body-start', { turn, step, callId: block.id })
   }
 
   commit(block: ToolCallBlock, result: ToolExecutionResult, callSeq: SessionSeq | undefined): void {
