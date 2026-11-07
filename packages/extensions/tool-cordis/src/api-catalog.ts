@@ -1671,6 +1671,11 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         parameters: [],
       },
       {
+        signature: 'diagnostics: boolean',
+        description: 'Whether JSON mode appends the durable graph/inbox/capability state event.',
+        parameters: [],
+      },
+      {
         signature: 'permissionMode?: string',
         description: 'Permission preset to apply before the task; absent preserves session policy.',
         parameters: [],
