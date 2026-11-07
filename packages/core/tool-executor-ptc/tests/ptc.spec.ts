@@ -1250,10 +1250,12 @@ describe('the run_code dispatch bridge', () => {
       {
         rootCallId: 'call-1', parentCallId: 'call-1', subCallId: 'call-1:ptc:1', name: 'echo',
         arguments: { value: 'one' }, isError: false, content: [{ type: 'text', text: 'echo:one' }],
+        durationMs: expect.any(Number),
       },
       {
         rootCallId: 'call-1', parentCallId: 'call-1', subCallId: 'call-1:ptc:2', name: 'echo',
         arguments: { value: 'two' }, isError: false, content: [{ type: 'text', text: 'echo:two' }],
+        durationMs: expect.any(Number),
       },
     ])
     expect(result.meta).toBeUndefined()

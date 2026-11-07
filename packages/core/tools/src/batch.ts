@@ -239,6 +239,8 @@ async function runGroup(
 class BatchSettlement {
   private readonly results: ToolCallResult[] = []
   private readonly contexts: UserMessage[] = []
+  /** Body start clock per call, so a receipt reports duration only when the body ran. */
+  private readonly bodyStarts = new Map<string, number>()
 
   constructor(private readonly input: ToolBatchInput) {}
 
@@ -259,10 +261,13 @@ class BatchSettlement {
     if (this.input.log === undefined) return
     const { agent, log: { turn, step } } = this.input
     // oxlint-disable-next-line typescript/no-non-null-assertion -- ToolBatchInput requires agent whenever log is provided
+    this.bodyStarts.set(String(block.id), performance.now())
     agent!.session.append('tool/body-start', { turn, step, callId: block.id })
   }
 
   commit(block: ToolCallBlock, result: ToolExecutionResult, callSeq: SessionSeq | undefined): void {
+    const startedAt = this.bodyStarts.get(String(block.id))
+    this.bodyStarts.delete(String(block.id))
     if (this.input.log !== undefined) {
       const { agent, log: { turn, step } } = this.input
       // oxlint-disable-next-line typescript/no-non-null-assertion -- ToolBatchInput requires agent whenever log is provided
@@ -271,6 +276,8 @@ class BatchSettlement {
         message: createToolResultMessage({ callId: block.id, content: result.content, isError: result.isError }),
         ...result.error?.info ? { error: result.error.info } : {},
         ...result.meta !== undefined ? { meta: result.meta } : {},
+        // A call denied or settled before dispatch has no body and no duration.
+        ...startedAt === undefined ? {} : { durationMs: Math.max(0, performance.now() - startedAt) },
       }, {
         surfaceOp: 'append',
         // oxlint-disable-next-line typescript/no-non-null-assertion -- start records a call seq whenever this batch logs results

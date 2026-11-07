@@ -529,6 +529,7 @@ export function createRunCodeTool(
             signal: runController.signal,
           }
           type DispatchOutcome = { isError: true; message: string } | { isError: false; value: JsonValue }
+          let bodyStartedAt: number | undefined
           const outcome = await new Promise<DispatchOutcome>((resolve, reject) => {
             // Set by the dispatch stage (or start() for a pre-settled result): what commit() finalizes in submission order.
             let parked:
@@ -570,6 +571,7 @@ export function createRunCodeTool(
                   ...result.error?.info === undefined ? {} : { error: result.error.info },
                   content: logged,
                   ...result.meta === undefined ? {} : { meta: result.meta },
+                  ...bodyStartedAt === undefined ? {} : { durationMs: Math.max(0, performance.now() - bodyStartedAt) },
                 })
               })().finally(() => { logWork.delete(task) })
               logWork.add(task)
@@ -584,6 +586,9 @@ export function createRunCodeTool(
                 reject(new Error(`run_code run is over (${String(runController.signal.reason)}); ${name} tool call abandoned`))
               },
               async start(): Promise<void> {
+                // The start marker is the body-entered point, so its clock is
+                // the only honest base for the receipt's duration.
+                bodyStartedAt = performance.now()
                 exec.agent?.session.append('tool/ptc-dispatch-start', {
                   rootCallId: exec.rootCallId,
                   parentCallId: exec.callId,
